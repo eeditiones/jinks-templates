@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <package xmlns="http://expath.org/ns/pkg" name="http://tei-publisher.com/library/jinks-templates" abbrev="jinks-templates" version="0.9.0" spec="1.0">
-    <title>jinx: App Manager for TEI Publisher</title>
+    <title>jinks templates</title>
     <dependency processor="http://exist-db.org" semver-min="6.2.0" />
     <xquery>
         <namespace>http://e-editiones.org/xquery/templates</namespace>
