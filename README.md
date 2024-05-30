@@ -74,19 +74,32 @@ return
 
 In the example above, the input is constructed as XML, but serialized into a string for the call to `tmpl:process`. The context map contains a single property, which will become available as variable `$title` within template expressions.
 
-The final argument is needed if you would like to use `[% include %]` or `[% extends %]` in your templates. It should point to a function with one parameter: the relative path to the resource, and should return the content of the resource as a string. In the following example we're prepending the assumed application root (`$config:app-root`) to get an absolute path and load the resource:
+The final argument is needed if you would like to use `[% include %]`, `[% extends %]` or `[% import %]` in your templates. It should point to a function with one parameter: the relative path to the resource, and should return a map with two fields:
+
+* `path`: the absolute path to the resource
+* `content`: the content of the resource as a string
+
+If the resource cannot be resolved, the empty sequence should be returned. In the following example we're prepending the assumed application root (`$config:app-root`) to get an absolute path and load the resource:
 
 ```xquery
 import module namespace tmpl="http://e-editiones.org/xquery/templates";
 import module namespace config=...;
 
-declare function local:resolver($relPath as xs:string) {
+declare function local:resolver($relPath as xs:string) as map(*)? {
     let $path := $config:app-root || "/" || $relPath
-    return
+    let $content :=
         if (util:binary-doc-available($path)) then
             util:binary-doc($path) => util:binary-to-string()
         else if (doc-available($path)) then
             doc($path) => serialize()
+        else
+            ()
+    return
+        if ($content) then
+            map {
+                "path": $path,
+                "content": $content
+            }
         else
             ()
 };
