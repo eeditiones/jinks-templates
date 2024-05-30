@@ -254,29 +254,29 @@ tmpl:extends(`{$ast/extends/@source}`, local:content#3, $_params, $_resolver,
             string-join(($prolog, $code), "&#10;")
 };
 
-declare function tmpl:prolog($ast as element(ast), $modules as map(*)*, $resolver as function(*)?) {
-    let $allModules := (
-        $modules,
-        for $import in $ast/import
-        return map {
-            "uri": $import/@uri,
-            "prefix": $import/@as,
-            "at":
-                if ($import/@at) then
-                    if (exists($resolver)) then
-                        let $resolved := $resolver($import/@at)
-                        return
-                            if (exists($resolved)) then
-                                $resolved?path
-                            else
-                                error($tmpl:ERROR_INCLUDE, "Module " || $import/@at || " not found")
-                    else
-                        error($tmpl:ERROR_INCLUDE, "No resolver available. Cannot import module " || $import/@at)
+declare %private function tmpl:imported-modules($ast as element(ast), $resolver as function(*)?) {
+    for $import in $ast/import
+    return map {
+        "uri": $import/@uri,
+        "prefix": $import/@as,
+        "at":
+            if ($import/@at) then
+                if (exists($resolver)) then
+                    let $resolved := $resolver($import/@at)
+                    return
+                        if (exists($resolved)) then
+                            $resolved?path
+                        else
+                            error($tmpl:ERROR_INCLUDE, "Module " || $import/@at || " not found")
                 else
-                    ()
-        }
-    )
-    for $module in $allModules
+                    error($tmpl:ERROR_INCLUDE, "No resolver available. Cannot import module " || $import/@at)
+            else
+                ()
+    }
+};
+
+declare %private function tmpl:prolog($ast as element(ast), $modules as map(*)*, $resolver as function(*)?) {
+    for $module in $modules
     return ``[
         import module namespace `{$module?prefix}` = "`{$module?uri}`" `{if ($module?at) then 'at "' || $module?at || '"' else ()}`;]``
 };
@@ -378,8 +378,9 @@ declare function tmpl:eval($code as xs:string, $_params as map(*), $_resolver as
 declare function tmpl:process($template as xs:string, $params as map(*), $config as map(*)) {
     let $ast := tmpl:tokenize($template) => tmpl:parse()
     let $mode := if ($config?plainText) then $tmpl:TEXT_MODE else $tmpl:XML_MODE
-    let $code := tmpl:generate($mode, $ast, $params, $config?modules, $config?resolver)
-    let $result := tmpl:eval($code, $params, $config?resolver, $config?modules)
+    let $modules := ($config?modules, tmpl:imported-modules($ast, $config?resolver))
+    let $code := tmpl:generate($mode, $ast, $params, $modules, $config?resolver)
+    let $result := tmpl:eval($code, $params, $config?resolver, $modules)
     return
         if ($config?debug) then
             map {
@@ -453,6 +454,7 @@ declare %private function tmpl:process-blocks($template as xs:string, $params as
     let $ast := tmpl:tokenize($template) => tmpl:parse()
     (: replace blocks in template with corresponding blocks of child :)
     let $modifiedAst := tmpl:replace-blocks($ast, $blocks)
+    let $modules := ($modules, tmpl:imported-modules($modifiedAst, $resolver))
     let $mode := if ($plainText) then $tmpl:TEXT_MODE else $tmpl:XML_MODE
     let $code := tmpl:generate($mode, $modifiedAst, $params, $modules, $resolver)
     return
