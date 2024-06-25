@@ -4,6 +4,6 @@
     <dependency processor="http://exist-db.org" semver-min="6.2.0" />
     <xquery>
         <namespace>http://e-editiones.org/xquery/templates</namespace>
-        <file>templates.xql</file>
+        <file>templates.xqm</file>
     </xquery>
 </package>
