@@ -14,12 +14,40 @@ declare variable $tmpl:ERROR_EXTENDS := xs:QName("tmpl:error-extends");
 declare variable $tmpl:XML_MODE := map {
     "xml": true(),
     "block": map {
-        "start": "&lt;t&gt;",
-        "end": "&lt;/t&gt;/node()"
+        "start": function($node as node()?) {
+            let $firstChild := $node/node()[not(matches(., "^[\s\n]+$"))][1]
+            return
+                if ($firstChild instance of element()) then
+                    ()
+                else
+                    "&lt;t&gt;"
+        },
+        "end": function($node as node()?) {
+            let $firstChild := $node/node()[not(matches(., "^[\s\n]+$"))][1]
+            return
+                if ($firstChild instance of element()) then
+                    ()
+                else
+                    "&lt;/t&gt;/node()"
+        }
     },
     "enclose": map {
-        "start": "{",
-        "end": "}"
+        "start": function($node as node()?) {
+            let $preceding := $node/preceding-sibling::node()[not(matches(., "^[\s\n]+$"))][1]
+            return
+                if (empty($preceding) and $node/parent::*[not(self::ast)]) then
+                    ()
+                else
+                    "{"
+        },
+        "end": function($node as node()?) {
+            let $preceding := $node/preceding-sibling::node()[not(matches(., "^[\s\n]+$"))][1]
+            return
+                if (empty($preceding) and $node/parent::*[not(self::ast)]) then
+                    ()
+                else
+                    "}"
+        }
     },
     "text": function($text as xs:string) {
         replace($text, "\{", "{{") => replace("\}", "}}")
@@ -29,12 +57,12 @@ declare variable $tmpl:XML_MODE := map {
 declare variable $tmpl:TEXT_MODE := map {
     "xml": false(),
     "block": map {
-        "start": "``[",
-        "end": "]``"
+        "start": function($node as node()?) { "``[" },
+        "end": function($node as node()?) { "]``" }
     },
     "enclose": map {
-        "start": "`{",
-        "end": "}`"
+        "start": function($node as node()?) { "`{" },
+        "end": function($node as node()?) { "}`" }
     },
     "text": function($text as xs:string) {
         $text
@@ -223,7 +251,7 @@ declare %private function tmpl:do-parse($tokens as item()*) {
  :)
 declare function tmpl:generate($config as map(*), $ast as element(ast), $params as map(*), $modules as map(*)*, $resolver as function(*)?) {
     let $prolog := tmpl:prolog($ast, $modules, $resolver) => string-join('&#10;')
-    let $body := $config?block?start || string-join(tmpl:emit($config, $ast)) || $config?block?end
+    let $body := $config?block?start(()) || string-join(tmpl:emit($config, $ast)) || $config?block?end(())
     let $code := string-join((tmpl:vars($params), $body), "&#10;")
     let $blocks :=
         string-join(
@@ -290,35 +318,35 @@ declare %private function tmpl:emit($config as map(*), $nodes as item()*) {
         return
             typeswitch ($node)
                 case element(if) return
-                    tmpl:escape($config, $node,
-                        "if (" || $node/@expr || ") then&#10;"
-                        || $config?block?start
-                        || tmpl:emit($config, $node/node())
-                        || $config?block?end
-                        || (if ($node/(else|elif)) then () else "&#10;else ()")
-                    )
+                    $config?enclose?start($node)
+                    || "if (" || $node/@expr || ") then&#10;"
+                    || $config?block?start($node)
+                    || tmpl:emit($config, $node/node())
+                    || $config?block?end($node)
+                    || (if ($node/(else|elif)) then () else "&#10;else ()")
+                    || $config?enclose?end($node)
                 case element(elif) return
-                    $config?block?end ||
+                    $config?block?end($node) ||
                     "else if (" || $node/@expr || ") then&#10;"
-                    || $config?block?start
+                    || $config?block?start($node)
                     || tmpl:emit($config, $node/node())
                     || (if ($node/(else|elif)) then () else "&#10;else ()")
                 case element(for) return
-                    tmpl:escape($config, $node,
-                        "for " || $node/@var || " in " || $node/@expr || " return&#10;"
-                        || $config?block?start
-                        || tmpl:emit($config, $node/node())
-                        || $config?block?end
-                    )
+                    $config?enclose?start($node)
+                    || "for " || $node/@var || " in " || $node/@expr || " return&#10;"
+                    || $config?block?start($node)
+                    || tmpl:emit($config, $node/node())
+                    || $config?block?end($node)
+                    || $config?enclose?end($node)
                 case element(else) return
-                    $config?block?end || "else&#10;" || $config?block?start 
+                    $config?block?end($node) || "else&#10;" || $config?block?start($node)
                     || tmpl:emit($config, $node/node())
                 case element(include) return
-                    tmpl:escape($config, $node,
-                        "tmpl:include(" || $node/@target || ", $_resolver, $_params, "
-                        || (if ($config?xml) then "false()" else "true()")
-                        || ", $_modules)"
-                    )
+                    $config?enclose?start($node)
+                    || "tmpl:include(" || $node/@target || ", $_resolver, $_params, "
+                    || (if ($config?xml) then "false()" else "true()")
+                    || ", $_modules)"
+                    || $config?enclose?end($node)
                 case element(value) return
                     let $expr :=
                         if (matches($node/@expr, "^[^$][\w_-]+$")) then
@@ -326,7 +354,9 @@ declare %private function tmpl:emit($config as map(*), $nodes as item()*) {
                         else
                             $node/@expr
                     return
-                        tmpl:escape($config, $node, $expr)
+                        $config?enclose?start($node)
+                        || $expr
+                        || $config?enclose?end($node)
                 case element(block) | element(import) return
                     ()
                 case element() return
