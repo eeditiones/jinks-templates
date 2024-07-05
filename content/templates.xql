@@ -10,6 +10,7 @@ declare variable $tmpl:ERROR_EOF := xs:QName("tmpl:error-eof");
 declare variable $tmpl:ERROR_SYNTAX := xs:QName("tmpl:error-syntax");
 declare variable $tmpl:ERROR_INCLUDE := xs:QName("tmpl:error-include");
 declare variable $tmpl:ERROR_EXTENDS := xs:QName("tmpl:error-extends");
+declare variable $tmpl:ERROR_DYNAMIC := xs:QName("tmpl:error-dynamic");
 
 declare variable $tmpl:XML_MODE := map {
     "xml": true(),
@@ -322,15 +323,18 @@ declare %private function tmpl:emit($config as map(*), $nodes as item()*) {
                     || "if (" || $node/@expr || ") then&#10;"
                     || $config?block?start($node)
                     || tmpl:emit($config, $node/node())
-                    || $config?block?end($node)
-                    || (if ($node/(else|elif)) then () else "&#10;else ()")
+                    || (if ($node/(else|elif)) then () else $config?block?end($node) || "&#10;else ()")
                     || $config?enclose?end($node)
                 case element(elif) return
                     $config?block?end($node) ||
-                    "else if (" || $node/@expr || ") then&#10;"
+                    "&#10;else if (" || $node/@expr || ") then&#10;"
                     || $config?block?start($node)
                     || tmpl:emit($config, $node/node())
-                    || (if ($node/(else|elif)) then () else "&#10;else ()")
+                    || (if ($node/(else|elif)) then () else $config?block?end($node) || "&#10;else ()")
+                case element(else) return
+                    $config?block?end($node) || " else&#10;" || $config?block?start($node)
+                    || tmpl:emit($config, $node/node())
+                    || $config?block?end($node)
                 case element(for) return
                     $config?enclose?start($node)
                     || "for " || $node/@var || " in " || $node/@expr || " return&#10;"
@@ -338,9 +342,6 @@ declare %private function tmpl:emit($config as map(*), $nodes as item()*) {
                     || tmpl:emit($config, $node/node())
                     || $config?block?end($node)
                     || $config?enclose?end($node)
-                case element(else) return
-                    $config?block?end($node) || "else&#10;" || $config?block?start($node)
-                    || tmpl:emit($config, $node/node())
                 case element(include) return
                     $config?enclose?start($node)
                     || "tmpl:include(" || $node/@target || ", $_resolver, $_params, "
@@ -367,19 +368,6 @@ declare %private function tmpl:emit($config as map(*), $nodes as item()*) {
 };
 
 (:~
- : Depending on the output mode (XML/HTML or text), some expressions may need
- : to be marked as enclosed expressions.
- :)
-declare %private function tmpl:escape($config as map(*), $node as element(), $content as item()*) {
-    let $preceding := $node/preceding-sibling::node()[not(matches(., "^[\s\n]+$"))][1]
-    return
-        if ($config?xml and empty($preceding) and $node/parent::*[not(self::ast)]) then
-            $content
-        else
-            $config?enclose?start || $content || $config?enclose?end
-};
-
-(:~
  : Creates a let ... return prolog, mapping each key/value in $params
  : to a parameter named like the key.
  :)
@@ -398,7 +386,14 @@ let $`{$key}` := $_params?`{$key}` ]``
  : Evaluate the passed in XQuery code.
  :)
 declare function tmpl:eval($code as xs:string, $_params as map(*), $_resolver as function(*)?, $_modules as map(*)*) {
-    util:eval($code)
+    try {
+        util:eval($code)
+    } catch * {
+        error($tmpl:ERROR_DYNAMIC, $err:description, map {
+            "description": $err:description,
+            "code": $code
+        })
+    }
 };
 
 (:~
@@ -491,7 +486,7 @@ declare %private function tmpl:process-blocks($template as xs:string, $params as
         try {
             tmpl:eval($code, $params, $resolver, $modules)
         } catch * {
-            error($tmpl:ERROR_EXTENDS, $err:description)
+            error($tmpl:ERROR_EXTENDS, $err:description, $err:value)
         }
 };
 
