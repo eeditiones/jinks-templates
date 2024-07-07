@@ -86,6 +86,20 @@ declare variable $tmpl:TOKEN_REGEX := [
     "\[(\[)(.+?)\]\]"
 ];
 
+declare function tmpl:frontmatter($input as xs:string) {
+    let $analyzed := analyze-string($input, "^\s*---(json|)\s*\n(.*?)\n---.*$", "s")
+    return 
+        if (count($analyzed//fn:group) = 2) then
+            let $type := $analyzed//fn:group[@nr = 1]
+            return
+                if ($type = "json" or $type = "") then
+                    parse-json($analyzed//fn:group[@nr = 2]/string())
+                else
+                    error($tmpl:ERROR_SYNTAX, "Unsupported frontmatter type " || $type)
+        else
+            ()
+};
+
 (:~
  : Tokenize the input string. Returns a sequence of strings
  : and elements corresponding to the tokens found.
@@ -94,6 +108,8 @@ declare function tmpl:tokenize($input as xs:string) {
     let $regex := "(?:" || string-join($tmpl:TOKEN_REGEX, "|") || ")"
     (: First remove comments :)
     let $input := replace($input, "\[(#)(.*?)#\]", "", "is")
+    (: Remove front matter :)
+    let $input := replace($input, "^\s*---(?:json|)\s*\n.*?\n---\n(.*)$", "$1", "is")
     let $analyzed := analyze-string($input, $regex, "is")
     for $token in $analyzed/*
     return
@@ -404,6 +420,7 @@ declare function tmpl:process($template as xs:string, $params as map(*), $config
     let $ast := tmpl:tokenize($template) => tmpl:parse()
     let $mode := if ($config?plainText) then $tmpl:TEXT_MODE else $tmpl:XML_MODE
     let $modules := ($config?modules, tmpl:imported-modules($ast, $config?resolver))
+    let $params := tmpl:merge-deep(($params, tmpl:frontmatter($template)))
     let $code := tmpl:generate($mode, $ast, $params, $modules, $config?resolver)
     let $result := tmpl:eval($code, $params, $config?resolver, $modules)
     return
@@ -419,6 +436,27 @@ declare function tmpl:process($template as xs:string, $params as map(*), $config
             }
         else
             $result
+};
+
+declare function tmpl:merge-deep($maps as map(*)*) {
+    if (count($maps) < 2) then
+        $maps
+    else
+        map:merge(
+            for $key in distinct-values($maps ! map:keys(.))
+            let $mapsWithKey := filter($maps, function($map) { map:contains($map, $key) })
+            let $newVal :=
+                if ($mapsWithKey[1]($key) instance of map(*)) then
+                    tmpl:merge-deep($mapsWithKey ! .($key))
+                else if ($key = ("odds", "ignore", "styles")) then
+                    array {
+                        distinct-values($mapsWithKey ! .($key)?*)
+                    }
+                else
+                    $mapsWithKey[last()]($key)
+            return
+                map:entry($key, $newVal)
+        )
 };
 
 declare function tmpl:include($path as xs:string, $resolver as function(*)?, $params as map(*), 

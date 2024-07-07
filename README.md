@@ -35,6 +35,7 @@ Supported template expressions are:
 | `[% include expr %]` | Include a partial. `expr` should resolve to relative path. |
 | `[% extends expr %]` | Extend a base template: contents of child template passed to base template in variable `$content`. Named blocks in child overwrite blocks in base. |
 | `[% block name %] … [% endblock %]` | Defines a named block or overwrites corresponding block in base template. |
+| `[% import "uri" as "prefix" at "path" %]` | Import an XQuery module so its functions/variables can be used in template expressions. |
 | `[# … #]` | Single or multi-line comment: content will be discarded |
 
 `expr` must be a valid XPath expression.
@@ -47,12 +48,17 @@ The library supports two modes: **XML/HTML** and **plain text**. They differ in 
 
 ## Use in XQuery
 
-The library exposes one main function, `tmpl:process`, which takes 4 arguments:
+The library exposes one main function, `tmpl:process`, which takes 3 arguments:
 
 1. the template to process as a string
 2. the context providing the information to be passed to templating expressions
-3. a boolean flag to indicate the mode: if true, output will be plain text, XML otherwise
-4. an optional resolver function to be used when looking up included files
+3. a configuration map with the following properties:
+   1. `plainText`: should be true for plain text processing (default is false)
+   2. `resolver`: the resolver function to use (see below)
+   3. `modules`: sequence of modules to import (see below)
+   4. `debug`: if true, `tmpl:process` returns a map with the result, ast and generated XQuery code (default is false)
+
+A simple example:
 
 ```xquery
 xquery version "3.1";
@@ -69,12 +75,14 @@ let $context := map {
     "title": "My app"
 }
 return
-    tmpl:process($input, $context, false(), ())
+    tmpl:process($input, $context, map { "plainText": false() })
 ```
 
-In the example above, the input is constructed as XML, but serialized into a string for the call to `tmpl:process`. The context map contains a single property, which will become available as variable `$title` within template expressions.
+The input is constructed as XML, but serialized into a string for the call to `tmpl:process`. The context map contains a single property, which will become available as variable `$title` within template expressions.
 
-The final argument is needed if you would like to use `[% include %]`, `[% extends %]` or `[% import %]` in your templates. It should point to a function with one parameter: the relative path to the resource, and should return a map with two fields:
+### Specifying a resolver
+
+The `resolver` function is needed if you would like to use `[% include %]`, `[% extends %]` or `[% import %]` in your templates. It should point to a function with one parameter: the relative path to the resource, and should return a map with two fields:
 
 * `path`: the absolute path to the resource
 * `content`: the content of the resource as a string
@@ -113,6 +121,48 @@ let $input :=
 let $context := map {
     "title": "My app"
 }
+let $config := map {
+    "resolver": local:resolver#1
+}
 return
-    tmpl:process($input, $context, false(), local:resolver#1)
+    tmpl:process($input, $context, $config)
 ```
+
+### Importing XQuery modules
+
+To make the variables and functions of specific XQuery modules available in your templates, you have to explicitely list those in the configuration using property `modules`. This is a list of maps, each defining one module to import:
+
+```xquery
+let $config := map {
+    "resolver": local:resolver#1,
+    "modules": map {
+        "uri": "http://www.tei-c.org/tei-simple/config",
+        "prefix": "config",
+        "at": $config:app-root || "/modules/config.xqm"
+    }
+}
+return
+    tmpl:process($input, $context, $config)
+```
+
+## Use frontmatter to extend the context
+
+Templates may start with a frontmatter block enclosed in `---`. The purpose of the frontmatter is to extend or overwrite the static context map provided in the second argument to `tmpl:process`. Currently only JSON syntax is supported. The frontmatter block will be parsed into an JSON object and merged with the static context passed to `tmpl:process`. For example, take the following template:
+
+```
+---json
+{
+  "title": "Lorem ipsum dolor sit amet",
+  "author": "Hans"
+}
+---
+<article>
+<h1>[[ $title ]]</h1>
+
+<p>Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+
+<footer>Published [[format-date(current-dateTime(), "[MNn] [D], [Y]", "en", (), ())]] by [[$author]].</footer>
+</article>
+```
+
+This will overwrite the `title` and `author` properties of the static context map.
