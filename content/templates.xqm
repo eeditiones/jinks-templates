@@ -86,8 +86,11 @@ declare variable $tmpl:TOKEN_REGEX := [
     "\[(\[)(.+?)\]\]"
 ];
 
+(:~
+ : Extract frontmatter
+ :)
 declare function tmpl:frontmatter($input as xs:string) {
-    let $analyzed := analyze-string($input, "^\s*---(json|)\s*\n(.*?)\n---.*$", "s")
+    let $analyzed := analyze-string($input, "^(?:\s*.+?>)?\s*---(json|)\s*\n(.*?)\n\s*---.*$", "s")
     return 
         if (count($analyzed//fn:group) = 2) then
             let $type := $analyzed//fn:group[@nr = 1]
@@ -109,7 +112,7 @@ declare function tmpl:tokenize($input as xs:string) {
     (: First remove comments :)
     let $input := replace($input, "\[(#)(.*?)#\]", "", "is")
     (: Remove front matter :)
-    let $input := replace($input, "^\s*---(?:json|)\s*\n.*?\n---\n(.*)$", "$1", "is")
+    let $input := replace($input, "^(\s*<.+?>)?\s*---(?:json|)\s*\n.*?\n\s*---(.*)$", "$1$2", "is")
     let $analyzed := analyze-string($input, $regex, "is")
     for $token in $analyzed/*
     return

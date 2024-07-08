@@ -149,7 +149,7 @@ return
 
 Templates may start with a frontmatter block enclosed in `---`. The purpose of the frontmatter is to extend or overwrite the static context map provided in the second argument to `tmpl:process`. Currently only JSON syntax is supported. The frontmatter block will be parsed into an JSON object and merged with the static context passed to `tmpl:process`. For example, take the following template:
 
-```
+```html
 ---json
 {
   "title": "Lorem ipsum dolor sit amet",
@@ -165,4 +165,16 @@ Templates may start with a frontmatter block enclosed in `---`. The purpose of t
 </article>
 ```
 
-This will overwrite the `title` and `author` properties of the static context map.
+This will overwrite the `title` and `author` properties of the static context map. The frontmatter block should come first in the file with a newline after each of the two separators. However, to allow for well-formed XML, the frontmatter may come *after* one or more surrounding elements, e.g.:
+
+```html
+<article>
+---json
+{
+  "title": "Lorem ipsum dolor sit amet",
+  "author": "Hans"
+}
+---
+<h1>[[ $title ]]</h1>
+</article>
+```
