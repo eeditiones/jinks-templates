@@ -291,11 +291,11 @@ declare variable $local:blocks := map {
     `{$blocks}`
 };
 
-declare function local:content($_params as map(*), $_resolver as function(*), $_modules as map(*)?) {
+declare function local:content($context as map(*), $_resolver as function(*), $_modules as map(*)?) {
     `{$code}`
 };
             
-tmpl:extends(`{$ast/extends/@source}`, local:content#3, $_params, $_resolver, 
+tmpl:extends(`{$ast/extends/@source}`, local:content#3, $context, $_resolver, 
     `{if ($config?xml) then 'false()' else 'true()'}`, $_modules, $local:blocks)]``
         (: otherwise just output the code :)
         else
@@ -363,7 +363,7 @@ declare %private function tmpl:emit($config as map(*), $nodes as item()*) {
                     || $config?enclose?end($node)
                 case element(include) return
                     $config?enclose?start($node)
-                    || "tmpl:include(" || $node/@target || ", $_resolver, $_params, "
+                    || "tmpl:include(" || $node/@target || ", $_resolver, $context, "
                     || (if ($config?xml) then "false()" else "true()")
                     || ", $_modules)"
                     || $config?enclose?end($node)
@@ -394,7 +394,7 @@ declare %private function tmpl:vars($params as map(*)) {
     if (map:size($params) > 0) then
         map:for-each($params, function($key, $value) {
             ``[
-let $`{$key}` := $_params?`{$key}` ]``
+let $`{$key}` := $context?`{$key}` ]``
         }) => string-join()
         || " return "
     else
@@ -404,11 +404,12 @@ let $`{$key}` := $_params?`{$key}` ]``
 (:~
  : Evaluate the passed in XQuery code.
  :)
-declare function tmpl:eval($code as xs:string, $_params as map(*), $_resolver as function(*)?, $_modules as map(*)*) {
+declare function tmpl:eval($code as xs:string, $context as map(*), $_resolver as function(*)?, $_modules as map(*)*) {
     try {
         util:eval($code)
     } catch * {
-        error($tmpl:ERROR_DYNAMIC, $err:description, map {
+        util:log("ERROR", $code),
+        error($tmpl:ERROR_DYNAMIC, head(($err:description, "runtime error")), map {
             "description": $err:description,
             "code": $code
         })

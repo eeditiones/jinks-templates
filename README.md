@@ -8,7 +8,7 @@ Instead of being entirely based on regular expressions, the templating module im
 
 The template syntax is similar to [nunjucks](https://mozilla.github.io/nunjucks/) or [jinja](https://jinja.palletsprojects.com/en/3.1.x/templates/), but uses the host language for all expressions, therefore giving users the full power of XPath/XQuery.
 
-The templating is passed a context map, which should containing all the information necessary for processing the template expressions. Each top-level property in the context map is made available as an XQuery variable. So if you have a context map like
+The templating is passed a context map, which should containing all the information necessary for processing the template expressions. The entire context map can be accessed via variable `$context`. Additionally, each top-level property in the context map is made available as an XQuery variable. So if you have a context map like
 
 ```xquery
 map {
@@ -21,7 +21,9 @@ map {
 }
 ```
 
-you can use a value expression `[[$title]]` to output the title. And to insert the content font, use `[[$theme?fonts?content]]`.
+you can either use a value expression `[[ $context?title ]]` or the shorter form `[[ $title ]]` to output the title. And to insert the content font, use `[[ $context?theme?fonts?content ]]` or `[[ $theme?fonts?content ]]`.
+
+**Note**: trying to access an undefined context property via the short form, e.g. `[[ $author ]]`, will result in an error. So in case you are unsure if a property is defined, use the long form, i.e. `[[ $context?author ]]`.
 
 Supported template expressions are:
 
