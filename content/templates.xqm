@@ -76,6 +76,7 @@ declare variable $tmpl:TEXT_MODE := map {
 declare variable $tmpl:TOKEN_REGEX := [
     "\[%\s*(end\w+)\s*%\]",
     "\[%\s*(for)\s+(\$\w+)\s+in\s+(.+?)%\]",
+    "\[%\s*(let)\s+(\$\w+)\s+=\s+(.+?)%\]",
     "\[%\s*(if)\s+(.+?)%\]",
     "\[%\s*(elif)\s+(.+?)%\]",
     "\[%\s*(else)\s*%\]",
@@ -89,14 +90,22 @@ declare variable $tmpl:TOKEN_REGEX := [
 (:~
  : Extract frontmatter
  :)
-declare function tmpl:frontmatter($input as xs:string) {
+declare function tmpl:frontmatter($input as xs:string, $params as map(*), $resolver as function(*)?, $modules as map(*)*) {
     let $analyzed := analyze-string($input, "^(?:\s*.+?>)?\s*---(json|)\s*\n(.*?)\n\s*---.*$", "s")
     return 
         if (count($analyzed//fn:group) = 2) then
             let $type := $analyzed//fn:group[@nr = 1]
             return
                 if ($type = "json" or $type = "") then
-                    parse-json($analyzed//fn:group[@nr = 2]/string())
+                    let $text := $analyzed//fn:group[@nr = 2]/string()
+                    let $result := tmpl:process($text, $params, map {
+                        "plainText": true(), 
+                        "resolver": $resolver, 
+                        "debug": false(),
+                        "modules": $modules
+                    })
+                    return
+                        parse-json($result)
                 else
                     error($tmpl:ERROR_SYNTAX, "Unsupported frontmatter type " || $type)
         else
@@ -123,6 +132,8 @@ declare function tmpl:tokenize($input as xs:string) {
                 switch($type)
                     case "endfor" return
                         <endfor/>
+                    case "endlet" return
+                        <endlet/>
                     case "endif" return
                         <endif/>
                     case "if" return
@@ -133,6 +144,8 @@ declare function tmpl:tokenize($input as xs:string) {
                         <else/>
                     case "for" return
                         <for var="{$token/fn:group[2] => normalize-space()}" expr="{$token/fn:group[3] => normalize-space()}"/>
+                    case "let" return
+                        <let var="{$token/fn:group[2] => normalize-space()}" expr="{$token/fn:group[3] => normalize-space()}"/>
                     case "include" return
                         <include target="{$token/fn:group[2] => normalize-space()}"/>
                     case "extends" return
@@ -214,6 +227,17 @@ declare %private function tmpl:do-parse($tokens as item()*) {
                         </for>,
                         tmpl:do-parse($tail)
                     )
+                case element(let) return
+                    let $body := tmpl:lookahead(tail($tokens), "let", 1)
+                    let $tail := subsequence(tail($tokens), count($body) + 1)
+                    return (
+                        <for var="{$next/@var}" expr="{$next/@expr}">
+                        {
+                            tmpl:do-parse($body)
+                        }
+                        </for>,
+                        tmpl:do-parse($tail)
+                    )
                 case element(if) return
                     let $body := tmpl:lookahead(tail($tokens), "if", 1)
                     let $tail := subsequence(tail($tokens), count($body) + 1)
@@ -256,7 +280,7 @@ declare %private function tmpl:do-parse($tokens as item()*) {
                     )
                 case element(include) | element(extends) | element(import) return
                     ($next, tmpl:do-parse(tail($tokens)))
-                case element(endfor) | element(endif) | element(endblock) | element(comment) return
+                case element(endfor) | element(endlet) | element(endif) | element(endblock) | element(comment) return
                     ()
                 default return
                     ($next, tmpl:do-parse(tail($tokens)))
@@ -305,28 +329,30 @@ tmpl:extends(`{$ast/extends/@source}`, local:content#3, $context, $_resolver,
 declare %private function tmpl:imported-modules($ast as element(ast), $resolver as function(*)?) {
     for $import in $ast/import
     return map {
-        "uri": $import/@uri,
-        "prefix": $import/@as,
-        "at":
-            if ($import/@at) then
-                if (exists($resolver)) then
-                    let $resolved := $resolver($import/@at)
-                    return
-                        if (exists($resolved)) then
-                            $resolved?path
-                        else
-                            error($tmpl:ERROR_INCLUDE, "Module " || $import/@at || " not found")
+        $import/@uri: map {
+            "prefix": $import/@as,
+            "at":
+                if ($import/@at) then
+                    if (exists($resolver)) then
+                        let $resolved := $resolver($import/@at)
+                        return
+                            if (exists($resolved)) then
+                                $resolved?path
+                            else
+                                error($tmpl:ERROR_INCLUDE, "Module " || $import/@at || " not found")
+                    else
+                        error($tmpl:ERROR_INCLUDE, "No resolver available. Cannot import module " || $import/@at)
                 else
-                    error($tmpl:ERROR_INCLUDE, "No resolver available. Cannot import module " || $import/@at)
-            else
-                ()
+                    ()
+        }
     }
 };
 
 declare %private function tmpl:prolog($ast as element(ast), $modules as map(*)*, $resolver as function(*)?) {
-    for $module in $modules
-    return ``[
-        import module namespace `{$module?prefix}` = "`{$module?uri}`" `{if ($module?at) then 'at "' || $module?at || '"' else ()}`;]``
+    map:for-each($modules, function($uri, $module) {
+``[
+import module namespace `{$module?prefix}` = "`{$uri}`" `{if ($module?at) then 'at "' || $module?at || '"' else ()}`;]``
+    })
 };
 
 (:~
@@ -361,6 +387,13 @@ declare %private function tmpl:emit($config as map(*), $nodes as item()*) {
                     || tmpl:emit($config, $node/node())
                     || $config?block?end($node)
                     || $config?enclose?end($node)
+                case element(let) return
+                    $config?enclose?start($node)
+                    || "let " || $node/@var || " := " || $node/@expr || " return&#10;"
+                    || $config?block?start($node)
+                    || tmpl:emit($config, $node/node())
+                    || $config?block?end($node)
+                    || $config?enclose?end($node)
                 case element(include) return
                     $config?enclose?start($node)
                     || "tmpl:include(" || $node/@target || ", $_resolver, $context, "
@@ -375,7 +408,7 @@ declare %private function tmpl:emit($config as map(*), $nodes as item()*) {
                             $node/@expr
                     return
                         $config?enclose?start($node)
-                        || $expr
+                        || "tmpl:valueOf(" || $expr || ")"
                         || $config?enclose?end($node)
                 case element(block) | element(import) return
                     ()
@@ -384,6 +417,18 @@ declare %private function tmpl:emit($config as map(*), $nodes as item()*) {
                 default return
                     $config?text($node)
     )
+};
+
+declare function tmpl:valueOf($values as item()*) {
+    for $value in $values
+    return
+        typeswitch ($value)
+            case map(*) return
+                serialize($value, map { "method": "json" })
+            case array(*) return
+                tmpl:valueOf($value?*)
+            default return
+                $value
 };
 
 (:~
@@ -423,8 +468,11 @@ declare function tmpl:eval($code as xs:string, $context as map(*), $_resolver as
 declare function tmpl:process($template as xs:string, $params as map(*), $config as map(*)) {
     let $ast := tmpl:tokenize($template) => tmpl:parse()
     let $mode := if ($config?plainText) then $tmpl:TEXT_MODE else $tmpl:XML_MODE
-    let $modules := ($config?modules, tmpl:imported-modules($ast, $config?resolver))
-    let $params := tmpl:merge-deep(($params, tmpl:frontmatter($template)))
+    let $modules := map:merge((
+        $config?modules, 
+        tmpl:imported-modules($ast, $config?resolver)
+    ))
+    let $params := tmpl:merge-deep(($params, tmpl:frontmatter($template, $params, $config?resolver, $modules)))
     let $code := tmpl:generate($mode, $ast, $params, $modules, $config?resolver)
     let $result := tmpl:eval($code, $params, $config?resolver, $modules)
     return
@@ -521,7 +569,10 @@ declare %private function tmpl:process-blocks($template as xs:string, $params as
     let $ast := tmpl:tokenize($template) => tmpl:parse()
     (: replace blocks in template with corresponding blocks of child :)
     let $modifiedAst := tmpl:replace-blocks($ast, $blocks)
-    let $modules := ($modules, tmpl:imported-modules($modifiedAst, $resolver))
+    let $modules := map:merge((
+        $modules, 
+        tmpl:imported-modules($modifiedAst, $resolver)
+    ))
     let $mode := if ($plainText) then $tmpl:TEXT_MODE else $tmpl:XML_MODE
     let $code := tmpl:generate($mode, $modifiedAst, $params, $modules, $resolver)
     return

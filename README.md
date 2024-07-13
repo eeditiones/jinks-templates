@@ -132,15 +132,16 @@ return
 
 ### Importing XQuery modules
 
-To make the variables and functions of specific XQuery modules available in your templates, you have to explicitely list those in the configuration using property `modules`. This is a list of maps, each defining one module to import:
+To make the variables and functions of specific XQuery modules available in your templates, you have to explicitely list those in the configuration using property `modules`. This is a map in which the key of each entry corresponds to the URI of the module and the value is a map with two properties: `prefix` and `at`, specifying the prefix to use and the location from which the module can be loaded:
 
 ```xquery
 let $config := map {
     "resolver": local:resolver#1,
     "modules": map {
-        "uri": "http://www.tei-c.org/tei-simple/config",
-        "prefix": "config",
-        "at": $config:app-root || "/modules/config.xqm"
+        "http://www.tei-c.org/tei-simple/config": map {
+            "prefix": "config",
+            "at": $config:app-root || "/modules/config.xqm"
+        }
     }
 }
 return
