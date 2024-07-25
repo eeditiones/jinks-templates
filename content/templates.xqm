@@ -24,7 +24,13 @@ declare variable $tmpl:XML_MODE := map {
         "start": function($node as node()?) {
             let $firstChild := $node/node()[not(matches(., "^[\s\n]+$"))][1]
             return
-                if ($firstChild instance of element()) then
+                if (
+                    $firstChild instance of element() and 
+                    not(
+                        $firstChild instance of element(else) or
+                        $firstChild instance of element(elif)
+                    )
+                ) then
                     ()
                 else
                     "&lt;t&gt;"
@@ -32,7 +38,13 @@ declare variable $tmpl:XML_MODE := map {
         "end": function($node as node()?) {
             let $firstChild := $node/node()[not(matches(., "^[\s\n]+$"))][1]
             return
-                if ($firstChild instance of element()) then
+                if (
+                    $firstChild instance of element() and 
+                    not(
+                        $firstChild instance of element(else) or
+                        $firstChild instance of element(elif)
+                    )
+                ) then
                     ()
                 else
                     "&lt;/t&gt;/node()"
@@ -381,13 +393,13 @@ declare %private function tmpl:emit($config as map(*), $nodes as item()*) {
                     || (if ($node/(else|elif)) then () else $config?block?end($node) || "&#10;else ()")
                     || $config?enclose?end($node)
                 case element(elif) return
-                    $config?block?end($node) ||
+                    $config?block?end($node/..) ||
                     "&#10;else if (" || $node/@expr || ") then&#10;"
                     || $config?block?start($node)
                     || tmpl:emit($config, $node/node())
                     || (if ($node/(else|elif)) then () else $config?block?end($node) || "&#10;else ()")
                 case element(else) return
-                    $config?block?end($node) || " else&#10;" || $config?block?start($node)
+                    $config?block?end($node/..) || " else&#10;" || $config?block?start($node)
                     || tmpl:emit($config, $node/node())
                     || $config?block?end($node)
                 case element(for) return
@@ -459,14 +471,15 @@ let $`{$key}` := $context?`{$key}` ]``
 (:~
  : Evaluate the passed in XQuery code.
  :)
-declare function tmpl:eval($code as xs:string, $context as map(*), $_resolver as function(*)?, $_modules as map(*)*) {
+declare function tmpl:eval($code as xs:string, $ast as element(), $context as map(*), $_resolver as function(*)?, $_modules as map(*)*) {
     try {
         util:eval($code)
     } catch * {
         util:log("ERROR", $code),
         error($tmpl:ERROR_DYNAMIC, head(($err:description, "runtime error")), map {
             "description": $err:description,
-            "code": $code
+            "code": $code,
+            "ast": $ast
         })
     }
 };
@@ -488,7 +501,7 @@ declare function tmpl:process($template as xs:string, $params as map(*), $config
     ))
     let $params := tmpl:merge-deep(($params, tmpl:frontmatter($template, $params, $config?resolver, $modules)))
     let $code := tmpl:generate($mode, $ast, $params, $modules, $config?resolver)
-    let $result := tmpl:eval($code, $params, $config?resolver, $modules)
+    let $result := tmpl:eval($code, $ast, $params, $config?resolver, $modules)
     return
         if ($config?debug) then
             map {
@@ -595,7 +608,7 @@ declare %private function tmpl:process-blocks($template as xs:string, $params as
     let $code := tmpl:generate($mode, $modifiedAst, $params, $modules, $resolver)
     return
         try {
-            tmpl:eval($code, $params, $resolver, $modules)
+            tmpl:eval($code, $ast, $params, $resolver, $modules)
         } catch * {
             error($tmpl:ERROR_EXTENDS, $err:description, $err:value)
         }
