@@ -387,6 +387,8 @@ declare %private function tmpl:escape-block($nodes as node()*) {
                         (),
                     tmpl:escape-block($node/node())
                 }
+            case text() return
+                replace($node, "([{}])", "$1$1")
             default return
                 $node
 };
