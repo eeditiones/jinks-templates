@@ -555,9 +555,12 @@ declare function tmpl:process($template as xs:string, $params as map(*), $config
     (: Remove "extends" from templating params to avoid infinite recursion :)
     let $params := map:merge((
         $params,
-        map {
-            "templating": map:remove($params?($tmpl:CONFIG_PROPERTY), $tmpl:CONFIG_EXTENDS)
-        }
+        if (map:contains($params, $tmpl:CONFIG_PROPERTY)) then
+            map {
+                "templating": map:remove($params?($tmpl:CONFIG_PROPERTY), $tmpl:CONFIG_EXTENDS)
+            }
+        else
+            ()
     ))
     let $modules := map:merge((
         $config?modules,
