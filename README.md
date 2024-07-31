@@ -58,7 +58,8 @@ The library exposes one main function, `tmpl:process`, which takes 3 arguments:
    1. `plainText`: should be true for plain text processing (default is false)
    2. `resolver`: the resolver function to use (see below)
    3. `modules`: sequence of modules to import (see below)
-   4. `debug`: if true, `tmpl:process` returns a map with the result, ast and generated XQuery code (default is false)
+   4. `namespaces`: namespace mappings (see below)
+   5. `debug`: if true, `tmpl:process` returns a map with the result, ast and generated XQuery code (default is false)
 
 A simple example:
 
@@ -142,11 +143,16 @@ let $config := map {
             "prefix": "config",
             "at": $config:app-root || "/modules/config.xqm"
         }
+    },
+    "namespaces": map {
+      "tei": "http://www.tei-c.org/ns/1.0"
     }
 }
 return
     tmpl:process($input, $context, $config)
 ```
+
+As shown above you can also declare namespaces via the configuration in a simple object using the desired prefix as key and the namespace URI as value.
 
 ## Use frontmatter to extend the context
 
@@ -181,3 +187,35 @@ This will overwrite the `title` and `author` properties of the static context ma
 <h1>[[ $title ]]</h1>
 </article>
 ```
+
+## Configuring the templating in frontmatter
+
+Some of the configuration parameters for the templating can also be set via the frontmatter instead of providing them to the `tmpl:process` XQuery function. In particular this includes `modules`, `namespaces` and `extends`. Templating configuration parameters should go below a top-level property named `templating`:
+
+```html
+---json
+{
+  "templating": {
+    "extends": "pages/demo/base.html",
+    "namespaces": {
+      "tei": "http://www.tei-c.org/ns/1.0"
+    },
+    "modules": {
+      "https://tei-publisher.com/jinks/xquery/demo": {
+        "prefix": "demo",
+        "at": "modules/demo.xql"
+      }
+    }
+  }
+}
+---
+
+<article>
+[% let $data = demo:tei() %]
+<h1>[[ $data//tei:title/text() ]]</h1>
+<p>[[ $data//tei:body/tei:p/text() ]]</p>
+[% endlet %]
+</article>
+```
+
+`extends` will have the same effect as using the `[% extends %]` templating expression.
