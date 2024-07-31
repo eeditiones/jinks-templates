@@ -310,7 +310,7 @@ declare %private function tmpl:do-parse($tokens as item()*) {
  : $tmpl:XML_MODE or $tmpl:TEXT_MODE.
  :)
 declare function tmpl:generate($config as map(*), $ast as element(ast), $params as map(*), $modules as map(*)*, 
-    $namespaces as map(*)?, $incomingBlocks as element()?, $resolver as function(*)?) {
+    $namespaces as map(*)?, $incomingBlocks as element()?, $extends as xs:string?, $resolver as function(*)?) {
     let $prolog := tmpl:prolog($ast, $modules, $namespaces, $resolver) => string-join('&#10;')
     let $body := $config?block?start(()) || string-join(tmpl:emit($config, $ast)) || $config?block?end(())
     let $code := string-join((tmpl:vars($params), $body), "&#10;")
@@ -329,8 +329,8 @@ declare function tmpl:generate($config as map(*), $ast as element(ast), $params 
     let $extends :=
         if ($ast//extends/@source) then
             $ast//extends/@source
-        else if (tmpl:templating-param($params, $tmpl:CONFIG_EXTENDS)) then
-            '"' || tmpl:templating-param($params, $tmpl:CONFIG_EXTENDS) || '"'
+        else if ($extends) then
+            '"' || $extends || '"'
         else
             ()
     return
@@ -549,6 +549,14 @@ declare function tmpl:process($template as xs:string, $params as map(*), $config
     let $ast := tmpl:tokenize($template) => tmpl:parse()
     let $mode := if ($config?plainText) then $tmpl:TEXT_MODE else $tmpl:XML_MODE
     let $params := tmpl:merge-deep(($params, tmpl:frontmatter($template)))
+    let $extends := tmpl:templating-param($params, $tmpl:CONFIG_EXTENDS)
+    (: Remove "extends" from templating params to avoid infinite recursion :)
+    let $params := map:merge((
+        $params,
+        map {
+            "templating": map:remove($params?($tmpl:CONFIG_PROPERTY), $tmpl:CONFIG_EXTENDS)
+        }
+    ))
     let $modules := map:merge((
         $config?modules,
         if (not($config?($tmpl:CONFIG_IMPORTS)) and exists($params?($tmpl:CONFIG_PROPERTY))) then
@@ -567,7 +575,8 @@ declare function tmpl:process($template as xs:string, $params as map(*), $config
             tmpl:replace-blocks($ast, $config?($tmpl:CONFIG_BLOCKS))
         else
             $ast
-    let $code := tmpl:generate($mode, $modifiedAst, $params, $modules, $namespaces, $config?($tmpl:CONFIG_BLOCKS), $config?resolver)
+    let $code := tmpl:generate($mode, $modifiedAst, $params, $modules, $namespaces, 
+        $config?($tmpl:CONFIG_BLOCKS), $extends, $config?resolver)
     let $result := tmpl:eval($code, $modifiedAst, $params, $config?resolver, $modules, $namespaces)
     return
         if ($config?debug) then
@@ -652,15 +661,7 @@ declare function tmpl:extends($path as xs:string, $contentFunc as function(*), $
                     $params,
                     map {
                         "content": $content
-                    },
-                    if (map:contains($params, $tmpl:CONFIG_PROPERTY)) then
-                        (: Delete the extends property to avoid infinite recursion :)
-                        map {
-                            $tmpl:CONFIG_PROPERTY:
-                                map:remove($params?($tmpl:CONFIG_PROPERTY), $tmpl:CONFIG_EXTENDS)
-                        }
-                    else
-                        ()
+                    }
                 ))
                 return
                     tmpl:process-blocks($template?content, $params, $plainText, $resolver, $modules, $namespaces, $blocks)
@@ -683,7 +684,7 @@ declare %private function tmpl:process-blocks($template as xs:string, $params as
         tmpl:imported-modules($modifiedAst, $resolver)
     ))
     let $mode := if ($plainText) then $tmpl:TEXT_MODE else $tmpl:XML_MODE
-    let $code := tmpl:generate($mode, $modifiedAst, $params, $modules, $namespaces, $blocks, $resolver)
+    let $code := tmpl:generate($mode, $modifiedAst, $params, $modules, $namespaces, $blocks, (), $resolver)
     return
         try {
             tmpl:eval($code, $ast, $params, $resolver, $modules, $namespaces)
