@@ -570,11 +570,13 @@ declare function tmpl:process($template as xs:string, $params as map(*), $config
             (),
         tmpl:imported-modules($ast, $config?resolver)
     ))
-    let $namespaces :=
+    let $namespaces := map:merge((
+        $config?namespaces,
         if (exists($params?($tmpl:CONFIG_PROPERTY))) then
             $params?($tmpl:CONFIG_PROPERTY)?namespaces
         else
             ()
+    ))
     let $modifiedAst := 
         if (map:contains($config, $tmpl:CONFIG_BLOCKS)) then
             tmpl:replace-blocks($ast, $config?($tmpl:CONFIG_BLOCKS))
@@ -598,6 +600,26 @@ declare function tmpl:process($template as xs:string, $params as map(*), $config
             $result
 };
 
+(:~
+ : Find distinct values in a sequence which may contain maps or atomic values. 
+ :)
+declare %private function tmpl:distinct-values($values) {
+    typeswitch ($values)
+        case map(*)+ return
+            let $jsonValues := 
+                map:merge(
+                    for $value in $values 
+                    return map {
+                        serialize($value, map { "method": "json", "indent": false() }): $value
+                    }
+                )
+            for $json in distinct-values(map:keys($jsonValues))
+            return
+                $jsonValues($json)
+        default return
+            distinct-values($values)
+};
+
 declare function tmpl:merge-deep($maps as map(*)*) {
     if (count($maps) < 2) then
         $maps
@@ -608,10 +630,10 @@ declare function tmpl:merge-deep($maps as map(*)*) {
             let $newVal :=
                 if ($mapsWithKey[1]($key) instance of map(*)) then
                     tmpl:merge-deep($mapsWithKey ! .($key))
-                else if ($key = ("odds", "ignore", "styles")) then
-                    array {
-                        distinct-values($mapsWithKey ! .($key)?*)
-                    }
+                else if ($mapsWithKey[1]($key) instance of array(*)) then
+                    let $values := $mapsWithKey ! .($key)?*
+                    return
+                        array { tmpl:distinct-values($values) }
                 else
                     $mapsWithKey[last()]($key)
             return
