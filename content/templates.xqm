@@ -601,25 +601,35 @@ declare function tmpl:process($template as xs:string, $params as map(*), $config
 };
 
 (:~
- : Find distinct values in a sequence which may contain maps or atomic values. 
+ : Get the distinct values in a sequence, paying special attention to sequences of maps:
+ :
+ : * if all maps have an "id" key, the values are deduplicated by this key
+ : * otherwise, the values are serialized and deduplicated by their JSON representation
  :)
 declare %private function tmpl:distinct-values($values) {
     typeswitch ($values)
         case map(*)+ return
-            let $jsonValues := 
-                map:merge(
+            if (every $value in $values satisfies map:contains($value, "id")) then
+                let $uniqueIds := distinct-values($values ! map:get(.,"id"))
+                let $byId := map:merge(for $value in $values return map:entry(map:get($value, "id"), $value))
+                for $id in $uniqueIds
+                return
+                    $byId($id)
+            else
+                let $jsonValues := 
                     for $value in $values 
-                    return map {
-                        serialize($value, map { "method": "json", "indent": false() }): $value
-                    }
-                )
-            for $json in distinct-values(map:keys($jsonValues))
-            return
-                $jsonValues($json)
+                    return
+                        serialize($value, map { "method": "json", "indent": false() })
+                for $value in distinct-values($jsonValues)
+                return
+                    parse-json($value)
         default return
             distinct-values($values)
 };
 
+(:~
+ : Deep merge a sequence of maps: maps are merged recursively, arrays are merged by taking the distinct values.
+ :)
 declare function tmpl:merge-deep($maps as map(*)*) {
     if (count($maps) < 2) then
         $maps
