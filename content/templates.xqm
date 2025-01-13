@@ -519,7 +519,10 @@ declare function tmpl:valueOf($values as item()*) {
 declare %private function tmpl:vars($params as map(*)) {
     if (map:size($params) > 0) then
         map:for-each($params, function($key, $value) {
-            ``[
+            if ($key = "$schema") then
+                ()
+            else
+                ``[
 let $`{$key}` := $context?`{$key}` ]``
         }) => string-join()
         || " return "
