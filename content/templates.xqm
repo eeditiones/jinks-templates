@@ -219,11 +219,11 @@ declare %private function tmpl:lookahead($tokens as item()*, $type as xs:string,
  : @param $tokens the input token stream
  : @param $resolver a function to resolve references to external resources (for include)
  :)
-declare function tmpl:parse($tokens as item()*) {
-    <ast>{tmpl:do-parse($tokens)}</ast>
+declare function tmpl:parse($tokens as item()*, $resolver as function(*)?) {
+    <ast>{tmpl:do-parse($tokens, $resolver)}</ast>
 };
 
-declare %private function tmpl:do-parse($tokens as item()*) {
+declare %private function tmpl:do-parse($tokens as item()*, $resolver as function(*)?) {
     if (empty($tokens)) then
         ()
     else
@@ -238,10 +238,10 @@ declare %private function tmpl:do-parse($tokens as item()*) {
                     return (
                         <for var="{$next/@var}" expr="{$next/@expr}">
                         {
-                            tmpl:do-parse($body)
+                            tmpl:do-parse($body, $resolver)
                         }
                         </for>,
-                        tmpl:do-parse($tail)
+                        tmpl:do-parse($tail, $resolver)
                     )
                 case element(let) return
                     let $body := tmpl:lookahead(tail($tokens), "let", 1)
@@ -249,10 +249,10 @@ declare %private function tmpl:do-parse($tokens as item()*) {
                     return (
                         <let var="{$next/@var}" expr="{$next/@expr}">
                         {
-                            tmpl:do-parse($body)
+                            tmpl:do-parse($body, $resolver)
                         }
                         </let>,
-                        tmpl:do-parse($tail)
+                        tmpl:do-parse($tail, $resolver)
                     )
                 case element(if) return
                     let $body := tmpl:lookahead(tail($tokens), "if", 1)
@@ -260,17 +260,17 @@ declare %private function tmpl:do-parse($tokens as item()*) {
                     return (
                         <if expr="{$next/@expr}">
                         {
-                            tmpl:do-parse($body)
+                            tmpl:do-parse($body, $resolver)
                         }
                         </if>,
-                        tmpl:do-parse($tail)
+                        tmpl:do-parse($tail, $resolver)
                     )
                 case element(elif) return
                     let $body := tmpl:lookahead(tail($tokens), "if", 1)
                     return (
                         <elif expr="{$next/@expr}">
                         {
-                            tmpl:do-parse($body)
+                            tmpl:do-parse($body, $resolver)
                         }
                         </elif>
                     )
@@ -279,7 +279,7 @@ declare %private function tmpl:do-parse($tokens as item()*) {
                     return (
                         <else>
                         {
-                            tmpl:do-parse($body)
+                            tmpl:do-parse($body, $resolver)
                         }
                         </else>
                     )
@@ -289,17 +289,25 @@ declare %private function tmpl:do-parse($tokens as item()*) {
                     return (
                         <block name="{$next/@name}">
                         {
-                            tmpl:do-parse($body)
+                            tmpl:do-parse($body, $resolver)
                         }
                         </block>,
-                        tmpl:do-parse($tail)
+                        tmpl:do-parse($tail, $resolver)
                     )
-                case element(include) | element(extends) | element(import) return
-                    ($next, tmpl:do-parse(tail($tokens)))
+                case element(include) return (
+                    (: check if we can do a static include :)
+                    if (matches($next/@target, '^"[^"]*"$')) then
+                        replace($next/@target, '^"([^"]*)"$', '$1') => tmpl:include-static($resolver)
+                    else
+                        $next,
+                    tmpl:do-parse(tail($tokens), $resolver)
+                )
+                case element(extends) | element(import) return
+                    ($next, tmpl:do-parse(tail($tokens), $resolver))
                 case element(endfor) | element(endlet) | element(endif) | element(endblock) | element(comment) return
                     ()
                 default return
-                    ($next, tmpl:do-parse(tail($tokens)))
+                    ($next, tmpl:do-parse(tail($tokens), $resolver))
 };
 
 (:~
@@ -476,11 +484,11 @@ declare %private function tmpl:emit($config as map(*), $nodes as item()*) {
                     || $config?block?end($node)
                     || $config?enclose?end($node)
                 case element(include) return
-                    $config?enclose?start($node)
-                    || "tmpl:include(" || $node/@target || ", $_resolver, $context, "
-                    || (if ($config?xml) then "false()" else "true()")
-                    || ", $_modules, $_namespaces, $local:blocks)"
-                    || $config?enclose?end($node)
+                        $config?enclose?start($node)
+                        || "tmpl:include(" || $node/@target || ", $_resolver, $context, "
+                        || (if ($config?xml) then "false()" else "true()")
+                        || ", $_modules, $_namespaces, $local:blocks)"
+                        || $config?enclose?end($node)
                 case element(value) return
                     let $expr :=
                         if (matches($node/@expr, "^[^$][\w_-]+$")) then
@@ -551,7 +559,7 @@ declare function tmpl:eval($code as xs:string, $ast as element(), $context as ma
  : tokenize, parse, generate and eval.
  :)
 declare function tmpl:process($template as xs:string, $params as map(*), $config as map(*)) {
-    let $ast := tmpl:tokenize($template) => tmpl:parse()
+    let $ast := tmpl:tokenize($template) => tmpl:parse($config?resolver)
     let $mode := if ($config?plainText) then $tmpl:TEXT_MODE else $tmpl:XML_MODE
     let $params := tmpl:merge-deep(($params, tmpl:frontmatter($template)))
     let $extends := tmpl:templating-param($params, $tmpl:CONFIG_EXTENDS)
@@ -654,6 +662,18 @@ declare function tmpl:merge-deep($maps as map(*)*) {
         )
 };
 
+declare function tmpl:include-static($path as xs:string, $resolver as function(*)?) {
+    if (empty($resolver)) then
+        error($tmpl:ERROR_INCLUDE, "Include is not available in this templating context")
+    else
+        let $template := $resolver($path)
+        return
+            if (exists($template)) then
+                tmpl:tokenize($template?content) => tmpl:parse($resolver)
+            else
+                error($tmpl:ERROR_INCLUDE, "Included template " || $path || " not found")
+};
+
 declare function tmpl:include($path as xs:string, $resolver as function(*)?, $params as map(*), 
     $plainText as xs:boolean?, $modules as map(*)*, $namespaces as map(*)?, $blocks as element()) {
     if (empty($resolver)) then
@@ -712,7 +732,7 @@ declare function tmpl:extends($path as xs:string, $contentFunc as function(*), $
 declare %private function tmpl:process-blocks($template as xs:string, $params as map(*), $plainText as xs:boolean?,
     $resolver as function(*), $modules as map(*)*, $namespaces as map(*)?, $blocks as element()) {
     (: parse the extended template :)
-    let $ast := tmpl:tokenize($template) => tmpl:parse()
+    let $ast := tmpl:tokenize($template) => tmpl:parse($resolver)
     (: replace blocks in template with corresponding blocks of child :)
     let $modifiedAst := tmpl:replace-blocks($ast, $blocks)
     let $modules := map:merge((
