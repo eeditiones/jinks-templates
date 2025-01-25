@@ -35,8 +35,8 @@ Supported template expressions are:
 | `… [% else %] … [% endif %]` | *else* block after *if* or *else if* |
 | `[% for $var in expr %] … [% endfor %]` | Loop `$var` over sequence returned by `expr` |
 | `[% include expr %]` | Include a partial. `expr` should resolve to relative path. |
-| `[% extends expr %]` | Extend a base template: contents of child template passed to base template in variable `$content`. Named blocks in child overwrite blocks in base. |
-| `[% block name %] … [% endblock %]` | Defines a named block or overwrites corresponding block in base template. |
+| `[% block name %] … [% endblock %]` | Defines a named block, optionally containing default content to be displayed if there's no `template` addressing this block.|
+| `[% template name %] … [% endtemplate %]` | Contains content to be appended to the block with the same name. |
 | `[% import "uri" as "prefix" at "path" %]` | Import an XQuery module so its functions/variables can be used in template expressions. |
 | `[# … #]` | Single or multi-line comment: content will be discarded |
 
@@ -190,7 +190,11 @@ This will overwrite the `title` and `author` properties of the static context ma
 
 ## Configuring the templating in frontmatter
 
-Some of the configuration parameters for the templating can also be set via the frontmatter instead of providing them to the `tmpl:process` XQuery function. In particular this includes `modules`, `namespaces` and `extends`. Templating configuration parameters should go below a top-level property named `templating`:
+Some of the configuration parameters for the templating can also be set via the frontmatter instead of providing them to the `tmpl:process` XQuery function. In particular this includes `modules`, `namespaces`. 
+
+Additionally, you can enable template inheritance in the frontmatter using `extends` (see next section).
+
+Templating configuration parameters should go below a top-level property named `templating`:
 
 ```html
 ---json
@@ -218,7 +222,12 @@ Some of the configuration parameters for the templating can also be set via the 
 </article>
 ```
 
-`extends` will have the same effect as using the `[% extends %]` templating expression.
+## Template inheritance
+
+A template can extend another template (the parent), which means its content will be injected into the parent template. Injection works as follows:
+
+* named templates present in the child template will replace the corresponding blocks with the same name in the parent template
+* the remaining content of the child is injected into the block named `content` in the parent template
 
 ## How context maps are merged
 
