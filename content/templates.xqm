@@ -104,7 +104,8 @@ declare variable $tmpl:TOKEN_REGEX := [
     "\[%\s*(elif)\s+(.+?)%\]",
     "\[%\s*(else)\s*%\]",
     "\[%\s*(include)\s+(.+?)%\]",
-    "\[%\+?\s*(block)\s+(.+?)%\]",
+    "\[%\s*(block)\s+(.+?)%\]",
+    "\[%\s*(template)\s+(.+?)%\]",
     '\[%\s*(import)\s+["''](.+?)["'']\s+as\s+["'']([\w\-_]+)["''](?:\s+at\s+["''](.+?)["''])?\s*%\]',
     "\[(\[)(.+?)\]\]"
 ];
@@ -164,17 +165,12 @@ declare function tmpl:tokenize($input as xs:string) {
                         <let var="{$token/fn:group[2] => normalize-space()}" expr="{$token/fn:group[3] => normalize-space()}"/>
                     case "include" return
                         <include target="{$token/fn:group[2] => normalize-space()}"/>
+                    case "template" return
+                        <template name="{$token/fn:group[2] => normalize-space()}"/>
+                    case "endtemplate" return
+                        <endtemplate/>
                     case "block" return
-                        let $name := $token/fn:group[2] => normalize-space()
-                        return
-                            <block name="{$name}">
-                            {
-                                if (starts-with($type/parent::fn:match, "[%+")) then
-                                    attribute { "append" } { "true" }
-                                else
-                                    ()
-                            }
-                            </block>
+                        <block name="{$token/fn:group[2] => normalize-space()}"/>
                     case "endblock" return
                         <endblock/>
                     case "import" return
@@ -290,6 +286,18 @@ declare %private function tmpl:do-parse($tokens as item()*, $resolver as functio
                         }
                         </else>
                     )
+                case element(template) return
+                    let $body := tmpl:lookahead(tail($tokens), "template", 1)
+                    let $tail := subsequence(tail($tokens), count($body) + 1)
+                    return (
+                        <template>
+                        {
+                            $next/@*,
+                            tmpl:do-parse($body, $resolver)
+                        }
+                        </template>,
+                        tmpl:do-parse($tail, $resolver)
+                    )
                 case element(block) return
                     let $body := tmpl:lookahead(tail($tokens), "block", 1)
                     let $tail := subsequence(tail($tokens), count($body) + 1)
@@ -326,7 +334,7 @@ declare %private function tmpl:do-parse($tokens as item()*, $resolver as functio
  : $tmpl:XML_MODE or $tmpl:TEXT_MODE.
  :)
 declare function tmpl:generate($config as map(*), $ast as element(ast), $params as map(*), $modules as map(*)*, 
-    $namespaces as map(*)?,$resolver as function(*)?,  $incomingBlocks as element(block)*) {
+    $namespaces as map(*)?,$resolver as function(*)?,  $incomingBlocks as element(template)*) {
     let $prolog := tmpl:prolog($ast, $modules, $namespaces, $resolver) => string-join('&#10;')
     let $body := $config?block?start(()) || string-join(tmpl:emit($config, $ast)) || $config?block?end(())
     let $code := string-join((tmpl:vars($params), $body), "&#10;")
@@ -547,7 +555,7 @@ declare function tmpl:eval($code as xs:string, $ast as element(), $context as ma
 (:~
  : Parses a template into an abstract syntax tree (AST), recursively merging extended templates and blocks.
  :)
-declare function tmpl:to-ast($template as xs:string, $params as map(*), $config as map(*), $blocks as element(block)*) {
+declare function tmpl:to-ast($template as xs:string, $params as map(*), $config as map(*), $blocks as element(template)*) {
     let $localContext := tmpl:frontmatter($template)
     let $extends := tmpl:templating-param($localContext, $tmpl:CONFIG_EXTENDS)
     let $context := tmpl:merge-deep(($params, $localContext))
@@ -567,11 +575,11 @@ declare function tmpl:to-ast($template as xs:string, $params as map(*), $config 
             ()
     ))
     let $ast := tmpl:tokenize($template) => tmpl:parse($config?resolver)
-    let $ast := tmpl:expand-blocks($ast, $incomingBlocks, false())
+    let $ast := tmpl:expand-blocks($ast, $incomingBlocks)
     return
         if ($extends) then
             let $contentBlock :=
-                <block name="content">
+                <template name="content">
                 {
                     if ($localContext?($tmpl:CONFIG_PROPERTY)?strip-root) then
                         attribute { "unwrap" } { "true" }
@@ -579,7 +587,7 @@ declare function tmpl:to-ast($template as xs:string, $params as map(*), $config 
                         (),
                     tmpl:get-content($ast)
                 }
-                </block>
+                </template>
             return
                 if (empty($config?resolver)) then
                     error($tmpl:ERROR_EXTENDS, "Extends is not available in this templating context")
@@ -587,18 +595,18 @@ declare function tmpl:to-ast($template as xs:string, $params as map(*), $config 
                     let $baseTemplate := $config?resolver($extends)
                     return
                         if (exists($baseTemplate)) then
-                            tmpl:to-ast($baseTemplate?content, $modContext, $config, ($incomingBlocks except $incomingBlocks[@name = 'content'], $ast//block, $contentBlock))
+                            tmpl:to-ast($baseTemplate?content, $modContext, $config, ($incomingBlocks except $incomingBlocks[@name = 'content'], $ast//template, $contentBlock))
                         else
                             error($tmpl:ERROR_EXTENDS, "Extended template " || $extends || " not found")
         else
             map {
-                "ast": tmpl:expand-blocks($ast, $incomingBlocks, true()),
+                "ast": tmpl:expand-default-blocks($ast),
                 "context": $modContext,
                 "blocks": $blocks
             }
 };
 
-declare %private function tmpl:expand-blocks($ast as node()*, $blocks as element(block)*) {
+declare %private function tmpl:expand-blocks($ast as node()*, $blocks as element(template)*) {
     for $node in $ast
     return
         typeswitch($node)
@@ -615,8 +623,6 @@ declare %private function tmpl:expand-blocks($ast as node()*, $blocks as element
                                     <unwrap>{ $block/node() }</unwrap>
                                 else
                                     $block/node()
-                        else if ($applyDefaults) then
-                            $node/node()
                         else
                             (: Defer until later :)
                             $node
@@ -629,11 +635,26 @@ declare %private function tmpl:expand-blocks($ast as node()*, $blocks as element
                 $node
 };
 
-declare %private function tmpl:get-content($ast as node()*) {
+declare %private function tmpl:expand-default-blocks($ast as node()*) {
     for $node in $ast
     return
         typeswitch($node)
             case element(block) return
+                $node/node()
+            case element() return
+                element { node-name($node) } {
+                    $node/@*,
+                    tmpl:expand-default-blocks($node/node())
+                }
+            default return
+                $node
+};
+
+declare %private function tmpl:get-content($ast as node()*) {
+    for $node in $ast
+    return
+        typeswitch($node)
+            case element(template) return
                 ()
             case element(ast) return
                 tmpl:get-content($node/node())
@@ -652,7 +673,7 @@ declare %private function tmpl:external-blocks($config as map(*), $params as map
         let $template := $resolver($file)
         return
             if (exists($template)) then
-                (tmpl:tokenize($template?content) => tmpl:parse($resolver))//block
+                (tmpl:tokenize($template?content) => tmpl:parse($resolver))//template
             else
                 error($tmpl:ERROR_INCLUDE, "Included template " || $file || " not found")
     else
@@ -663,7 +684,7 @@ declare function tmpl:process($template as xs:string, $params as map(*), $config
     tmpl:process($template, $params, $config, ())
 };
 
-declare function tmpl:process($template as xs:string, $params as map(*), $config as map(*), $blocks as element(block)*) {
+declare function tmpl:process($template as xs:string, $params as map(*), $config as map(*), $blocks as element(template)*) {
     let $ast := tmpl:to-ast($template, $params, $config, $blocks)
     let $modules := map:merge((
         $config?modules,
