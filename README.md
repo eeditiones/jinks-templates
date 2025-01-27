@@ -31,7 +31,7 @@ Supported template expressions are:
 | -------- | ------- |
 | `[[ expr ]]` | Insert result of evaluating `expr` |
 | `[% if expr %] … [% endif %]` | Conditional evaluation of block |
-| `… [% elsif expr %] …` | *else if* block after *if* |
+| `… [% elif expr %] …` | *else if* block after *if* |
 | `… [% else %] … [% endif %]` | *else* block after *if* or *else if* |
 | `[% for $var in expr %] … [% endfor %]` | Loop `$var` over sequence returned by `expr` |
 | `[% include expr %]` | Include a partial. `expr` should resolve to relative path. |
