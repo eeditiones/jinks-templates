@@ -476,9 +476,14 @@ declare %private function tmpl:emit($config as map(*), $nodes as item()*) {
                         || (if ($config?xml) then "false()" else "true()")
                         || ", $_modules, $_namespaces, $local:blocks/block)"
                         || $config?enclose?end($node)
-                case element(unwrap) return
+                case element(content) return
                     $config?enclose?start($node)
-                    || "tmpl:unwrap(" || tmpl:emit($config, $node/node()) || ")"
+                    || "tmpl:content("
+                    || $config?block?start($node)
+                    || tmpl:emit($config, $node/node())
+                    || $config?block?end($node)
+                    || (if ($node/@unwrap) then ", true()" else ", false()")
+                    || ")"
                     || $config?enclose?end($node)
                 case element(value) return
                     let $expr :=
@@ -511,11 +516,18 @@ declare function tmpl:valueOf($values as item()*) {
                 $value
 };
 
-declare function tmpl:unwrap($nodes as node()*) {
-    if (count($nodes) = 1) then
-        $nodes/node()
-    else
-        $nodes
+(:~
+ : Handle content blocks: remove the wrapping element if it is a <template> element or $unwrap is true
+ :)
+declare function tmpl:content($nodes as item()*, $unwrap as xs:boolean?) {
+    typeswitch ($nodes)
+        case element() return
+            if (count($nodes) = 1 and ($unwrap or $nodes[1] instance of element(template))) then
+                $nodes/node()
+            else
+                $nodes
+        default return
+            $nodes
 };
 
 (:~
@@ -606,6 +618,9 @@ declare function tmpl:to-ast($template as xs:string, $params as map(*), $config 
             }
 };
 
+(:~
+ : Resolve blocks in the AST, appending the content of matching templates.
+ :)
 declare %private function tmpl:expand-blocks($ast as node()*, $blocks as element(template)*) {
     for $node in $ast
     return
@@ -620,7 +635,9 @@ declare %private function tmpl:expand-blocks($ast as node()*, $blocks as element
                             for $block in reverse($blocks)
                             return
                                 if ($block/@unwrap) then
-                                    <unwrap>{ $block/node() }</unwrap>
+                                    <content unwrap="true">{ $block/node() }</content>
+                                else if ($block/@name = 'content') then
+                                    <content>{ $block/node() }</content>
                                 else
                                     $block/node()
                         else
