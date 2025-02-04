@@ -19,8 +19,9 @@ declare variable $tmpl:CONFIG_RESOLVER := "resolver";
 declare variable $tmpl:CONFIG_DEBUG := "debug";
 declare variable $tmpl:CONFIG_MODULES := "modules";
 declare variable $tmpl:CONFIG_NAMESPACES := "namespaces";
-declare variable $tmpl:CONFIG_BLOCKS := "blocks";
 declare variable $tmpl:CONFIG_EXTENDS := "extends";
+declare variable $tmpl:CONFIG_USE := "use";
+declare variable $tmpl:CONFIG_IGNORE_USE := "ignoreUse";
 
 declare variable $tmpl:XML_MODE := map {
     "xml": true(),
@@ -103,8 +104,8 @@ declare variable $tmpl:TOKEN_REGEX := [
     "\[%\s*(elif)\s+(.+?)%\]",
     "\[%\s*(else)\s*%\]",
     "\[%\s*(include)\s+(.+?)%\]",
-    "\[%\s*(extends)\s+(.+?)%\]",
     "\[%\s*(block)\s+(.+?)%\]",
+    "\[%\s*(template)\s+(.+?)%\]",
     '\[%\s*(import)\s+["''](.+?)["'']\s+as\s+["'']([\w\-_]+)["''](?:\s+at\s+["''](.+?)["''])?\s*%\]',
     "\[(\[)(.+?)\]\]"
 ];
@@ -125,7 +126,7 @@ declare function tmpl:frontmatter($input as xs:string) {
                 else
                     error($tmpl:ERROR_SYNTAX, "Unsupported frontmatter type " || $type)
         else
-            ()
+            map {}
 };
 
 (:~
@@ -164,8 +165,10 @@ declare function tmpl:tokenize($input as xs:string) {
                         <let var="{$token/fn:group[2] => normalize-space()}" expr="{$token/fn:group[3] => normalize-space()}"/>
                     case "include" return
                         <include target="{$token/fn:group[2] => normalize-space()}"/>
-                    case "extends" return
-                        <extends source="{$token/fn:group[2] => normalize-space()}"/>
+                    case "template" return
+                        <template name="{$token/fn:group[2] => normalize-space()}"/>
+                    case "endtemplate" return
+                        <endtemplate/>
                     case "block" return
                         <block name="{$token/fn:group[2] => normalize-space()}"/>
                     case "endblock" return
@@ -283,12 +286,25 @@ declare %private function tmpl:do-parse($tokens as item()*, $resolver as functio
                         }
                         </else>
                     )
+                case element(template) return
+                    let $body := tmpl:lookahead(tail($tokens), "template", 1)
+                    let $tail := subsequence(tail($tokens), count($body) + 1)
+                    return (
+                        <template>
+                        {
+                            $next/@*,
+                            tmpl:do-parse($body, $resolver)
+                        }
+                        </template>,
+                        tmpl:do-parse($tail, $resolver)
+                    )
                 case element(block) return
                     let $body := tmpl:lookahead(tail($tokens), "block", 1)
                     let $tail := subsequence(tail($tokens), count($body) + 1)
                     return (
-                        <block name="{$next/@name}">
+                        <block>
                         {
+                            $next/@*,
                             tmpl:do-parse($body, $resolver)
                         }
                         </block>,
@@ -302,7 +318,7 @@ declare %private function tmpl:do-parse($tokens as item()*, $resolver as functio
                         $next,
                     tmpl:do-parse(tail($tokens), $resolver)
                 )
-                case element(extends) | element(import) return
+                case element(import) return
                     ($next, tmpl:do-parse(tail($tokens), $resolver))
                 case element(endfor) | element(endlet) | element(endif) | element(endblock) | element(comment) return
                     ()
@@ -318,14 +334,14 @@ declare %private function tmpl:do-parse($tokens as item()*, $resolver as functio
  : $tmpl:XML_MODE or $tmpl:TEXT_MODE.
  :)
 declare function tmpl:generate($config as map(*), $ast as element(ast), $params as map(*), $modules as map(*)*, 
-    $namespaces as map(*)?, $incomingBlocks as element()?, $extends as xs:string?, $resolver as function(*)?) {
+    $namespaces as map(*)?,$resolver as function(*)?,  $incomingBlocks as element(template)*) {
     let $prolog := tmpl:prolog($ast, $modules, $namespaces, $resolver) => string-join('&#10;')
     let $body := $config?block?start(()) || string-join(tmpl:emit($config, $ast)) || $config?block?end(())
     let $code := string-join((tmpl:vars($params), $body), "&#10;")
     let $blocks :=
         <blocks xmlns="">
         {
-            for $block in ($ast//block, $incomingBlocks/block)
+            for $block in $incomingBlocks[not(@name = 'content')]
             return
                 <block name="{$block/@name}">
                 {
@@ -334,45 +350,16 @@ declare function tmpl:generate($config as map(*), $ast as element(ast), $params 
                 </block>
         }
         </blocks>
-    let $extends :=
-        if ($ast//extends/@source) then
-            $ast//extends/@source
-        else if ($extends) then
-            '"' || $extends || '"'
-        else
-            ()
     return
-        (: if template extends another, output call to tmpl:extends :)
-        if ($extends) then
-(: start string template :)
-            ``[
+        (: start string template :)
+        ``[
 `{ $prolog }`
 
-declare variable $local:blocks :=
-    `{ serialize($blocks) }`
-;
-
-declare function local:content($context as map(*), $_resolver as function(*), $_modules as map(*)?, $_namespaces as map(*)?) {
-    `{$code}`
-};
-            
-tmpl:extends(`{$extends}`, local:content#4, $context, $_resolver, 
-    `{if ($config?xml) then 'false()' else 'true()'}`, $_modules, $_namespaces, $local:blocks)]``
-(: end string template :)
-
-        (: otherwise just output the code :)
-        else
-(: start string template :)
-            ``[
-`{ $prolog }`
-
-declare variable $local:blocks :=
-    `{serialize($blocks)}`
-;
+declare variable $local:blocks := `{ serialize($blocks) }`;
 
 `{ $code }`
-            ]``
-(: end string template :)
+        ]``
+        (: end string template :)
 };
 
 declare %private function tmpl:templating-param($params as map(*), $key as xs:string) {
@@ -487,8 +474,17 @@ declare %private function tmpl:emit($config as map(*), $nodes as item()*) {
                         $config?enclose?start($node)
                         || "tmpl:include(" || $node/@target || ", $_resolver, $context, "
                         || (if ($config?xml) then "false()" else "true()")
-                        || ", $_modules, $_namespaces, $local:blocks)"
+                        || ", $_modules, $_namespaces, $local:blocks/block)"
                         || $config?enclose?end($node)
+                case element(content) return
+                    $config?enclose?start($node)
+                    || "tmpl:content("
+                    || $config?block?start($node)
+                    || tmpl:emit($config, $node/node())
+                    || $config?block?end($node)
+                    || (if ($node/@unwrap) then ", true()" else ", false()")
+                    || ")"
+                    || $config?enclose?end($node)
                 case element(value) return
                     let $expr :=
                         if (matches($node/@expr, "^[^$][\w_-]+$")) then
@@ -518,6 +514,20 @@ declare function tmpl:valueOf($values as item()*) {
                 tmpl:valueOf($value?*)
             default return
                 $value
+};
+
+(:~
+ : Handle content blocks: remove the wrapping element if it is a <template> element or $unwrap is true
+ :)
+declare function tmpl:content($nodes as item()*, $unwrap as xs:boolean?) {
+    typeswitch ($nodes)
+        case element() return
+            if (count($nodes) = 1 and ($unwrap or $nodes[1] instance of element(template))) then
+                $nodes/node()
+            else
+                $nodes
+        default return
+            $nodes
 };
 
 (:~
@@ -555,51 +565,166 @@ declare function tmpl:eval($code as xs:string, $ast as element(), $context as ma
 };
 
 (:~
- : Compile and execute the given template. Convenience method which combines
- : tokenize, parse, generate and eval.
+ : Parses a template into an abstract syntax tree (AST), recursively merging extended templates and blocks.
  :)
-declare function tmpl:process($template as xs:string, $params as map(*), $config as map(*)) {
-    let $ast := tmpl:tokenize($template) => tmpl:parse($config?resolver)
-    let $mode := if ($config?plainText) then $tmpl:TEXT_MODE else $tmpl:XML_MODE
-    let $params := tmpl:merge-deep(($params, tmpl:frontmatter($template)))
-    let $extends := tmpl:templating-param($params, $tmpl:CONFIG_EXTENDS)
+declare function tmpl:to-ast($template as xs:string, $params as map(*), $config as map(*), $blocks as element(template)*) {
+    let $localContext := tmpl:frontmatter($template)
+    let $extends := tmpl:templating-param($localContext, $tmpl:CONFIG_EXTENDS)
+    let $context := tmpl:merge-deep(($params, $localContext))
+    let $incomingBlocks := (
+        $blocks,
+        tmpl:external-blocks($config, $context, $config?resolver)
+    )
     (: Remove "extends" from templating params to avoid infinite recursion :)
-    let $params := map:merge((
-        $params,
-        if (map:contains($params, $tmpl:CONFIG_PROPERTY)) then
+    let $modContext := map:merge((
+        $context,
+        if (map:contains($context, $tmpl:CONFIG_PROPERTY)) then
             map {
-                "templating": map:remove($params?($tmpl:CONFIG_PROPERTY), $tmpl:CONFIG_EXTENDS)
+                "templating": map:remove($context?($tmpl:CONFIG_PROPERTY), $tmpl:CONFIG_EXTENDS)
+                    => map:remove($tmpl:CONFIG_USE)
             }
         else
             ()
     ))
+    let $ast := tmpl:tokenize($template) => tmpl:parse($config?resolver)
+    let $ast := tmpl:expand-blocks($ast, $incomingBlocks)
+    return
+        if ($extends) then
+            let $contentBlock :=
+                <template name="content">
+                {
+                    if ($localContext?($tmpl:CONFIG_PROPERTY)?strip-root) then
+                        attribute { "unwrap" } { "true" }
+                    else
+                        (),
+                    tmpl:get-content($ast)
+                }
+                </template>
+            return
+                if (empty($config?resolver)) then
+                    error($tmpl:ERROR_EXTENDS, "Extends is not available in this templating context")
+                else
+                    let $baseTemplate := $config?resolver($extends)
+                    return
+                        if (exists($baseTemplate)) then
+                            tmpl:to-ast($baseTemplate?content, $modContext, $config, ($incomingBlocks except $incomingBlocks[@name = 'content'], $ast//template, $contentBlock))
+                        else
+                            error($tmpl:ERROR_EXTENDS, "Extended template " || $extends || " not found")
+        else
+            map {
+                "ast": tmpl:expand-default-blocks($ast),
+                "context": $modContext,
+                "blocks": $blocks
+            }
+};
+
+(:~
+ : Resolve blocks in the AST, appending the content of matching templates.
+ :)
+declare %private function tmpl:expand-blocks($ast as node()*, $blocks as element(template)*) {
+    for $node in $ast
+    return
+        typeswitch($node)
+            case element(block) return
+                if ($node/@append) then
+                    $node
+                else
+                    let $blocks := $blocks[@name = $node/@name]
+                    return
+                        if ($blocks) then
+                            for $block in reverse($blocks)
+                            return
+                                if ($block/@unwrap) then
+                                    <content unwrap="true">{ $block/node() }</content>
+                                else if ($block/@name = 'content') then
+                                    <content>{ $block/node() }</content>
+                                else
+                                    $block/node()
+                        else
+                            (: Defer until later :)
+                            $node
+            case element() return
+                element { node-name($node) } {
+                    $node/@*,
+                    tmpl:expand-blocks($node/node(), $blocks)
+                }
+            default return
+                $node
+};
+
+declare %private function tmpl:expand-default-blocks($ast as node()*) {
+    for $node in $ast
+    return
+        typeswitch($node)
+            case element(block) return
+                $node/node()
+            case element() return
+                element { node-name($node) } {
+                    $node/@*,
+                    tmpl:expand-default-blocks($node/node())
+                }
+            default return
+                $node
+};
+
+declare %private function tmpl:get-content($ast as node()*) {
+    for $node in $ast
+    return
+        typeswitch($node)
+            case element(template) return
+                ()
+            case element(ast) return
+                tmpl:get-content($node/node())
+            case element() return
+                element { node-name($node) } {
+                    $node/@*,
+                    tmpl:get-content($node/node())
+                }
+            default return
+                $node
+};
+
+declare %private function tmpl:external-blocks($config as map(*), $params as map(*), $resolver as function(*)?) {
+    if (not($config?($tmpl:CONFIG_IGNORE_USE)) and map:contains($params, $tmpl:CONFIG_PROPERTY)) then
+        for $file in $params?($tmpl:CONFIG_PROPERTY)?($tmpl:CONFIG_USE)?*
+        let $template := $resolver($file)
+        return
+            if (exists($template)) then
+                (tmpl:tokenize($template?content) => tmpl:parse($resolver))//template
+            else
+                error($tmpl:ERROR_INCLUDE, "Included template " || $file || " not found")
+    else
+        ()
+};
+
+declare function tmpl:process($template as xs:string, $params as map(*), $config as map(*)) {
+    tmpl:process($template, $params, $config, ())
+};
+
+declare function tmpl:process($template as xs:string, $params as map(*), $config as map(*), $blocks as element(template)*) {
+    let $ast := tmpl:to-ast($template, $params, $config, $blocks)
     let $modules := map:merge((
         $config?modules,
-        if (not($config?($tmpl:CONFIG_IMPORTS)) and exists($params?($tmpl:CONFIG_PROPERTY))) then
-            $params?($tmpl:CONFIG_PROPERTY)?modules
+        if (not($config?($tmpl:CONFIG_IMPORTS)) and exists($ast?context?($tmpl:CONFIG_PROPERTY))) then
+            $ast?context?($tmpl:CONFIG_PROPERTY)?modules
         else
             (),
-        tmpl:imported-modules($ast, $config?resolver)
+        tmpl:imported-modules($ast?ast, $config?resolver)
     ))
     let $namespaces := map:merge((
         $config?namespaces,
-        if (exists($params?($tmpl:CONFIG_PROPERTY))) then
-            $params?($tmpl:CONFIG_PROPERTY)?namespaces
+        if (exists($ast?context?($tmpl:CONFIG_PROPERTY))) then
+            $ast?context?($tmpl:CONFIG_PROPERTY)?namespaces
         else
             ()
     ))
-    let $modifiedAst := 
-        if (map:contains($config, $tmpl:CONFIG_BLOCKS)) then
-            tmpl:replace-blocks($ast, $config?($tmpl:CONFIG_BLOCKS))
-        else
-            $ast
-    let $code := tmpl:generate($mode, $modifiedAst, $params, $modules, $namespaces, 
-        $config?($tmpl:CONFIG_BLOCKS), $extends, $config?resolver)
-    let $result := tmpl:eval($code, $modifiedAst, $params, $config?resolver, $modules, $namespaces)
+    let $mode := if ($config?plainText) then $tmpl:TEXT_MODE else $tmpl:XML_MODE
+    let $code := tmpl:generate($mode, $ast?ast, $ast?context, $modules, $namespaces, $config?resolver, $ast?blocks)
+    let $result := tmpl:eval($code, $ast?ast, $ast?context, $config?resolver, $modules, $namespaces)
     return
         if ($config?debug) then
             map {
-                "ast": $ast,
+                "ast": $ast?ast,
                 "xquery": $code,
                 "result": 
                     if (not($config?plainText)) then
@@ -675,7 +800,7 @@ declare function tmpl:include-static($path as xs:string, $resolver as function(*
 };
 
 declare function tmpl:include($path as xs:string, $resolver as function(*)?, $params as map(*), 
-    $plainText as xs:boolean?, $modules as map(*)*, $namespaces as map(*)?, $blocks as element()) {
+    $plainText as xs:boolean?, $modules as map(*)*, $namespaces as map(*)?, $blocks as element()*) {
     if (empty($resolver)) then
         error($tmpl:ERROR_INCLUDE, "Include is not available in this templating context")
     else
@@ -687,9 +812,8 @@ declare function tmpl:include($path as xs:string, $resolver as function(*)?, $pa
                     $tmpl:CONFIG_RESOLVER: $resolver, 
                     $tmpl:CONFIG_DEBUG: false(),
                     $tmpl:CONFIG_MODULES: $modules,
-                    $tmpl:CONFIG_NAMESPACES: $namespaces,
-                    $tmpl:CONFIG_BLOCKS: $blocks
-                })
+                    $tmpl:CONFIG_NAMESPACES: $namespaces
+                }, $blocks)
                 return
                     if ($result instance of map(*) and $result?error) then
                         error($tmpl:ERROR_INCLUDE, $result?error)
@@ -697,80 +821,4 @@ declare function tmpl:include($path as xs:string, $resolver as function(*)?, $pa
                         $result
             else
                 error($tmpl:ERROR_INCLUDE, "Included template " || $path || " not found")
-};
-
-(:~
- : Helper function called at runtime: 
- : 
- : * load and parse the base template specified by $path
- : * call $contentFunc to set variable $content
- : * replace all named blocks in ast of base template with corresponding blocks from child
- : given in $blocks
- :)
-declare function tmpl:extends($path as xs:string, $contentFunc as function(*), $params as map(*), 
-    $resolver as function(*)?, $plainText as xs:boolean?, $modules as map(*)*, 
-    $namespaces as map(*)?, $blocks as element()) {
-    if (empty($resolver)) then
-        error($tmpl:ERROR_EXTENDS, "Extends is not available in this templating context")
-    else
-        let $template := $resolver($path)
-        return
-            if (exists($template)) then
-                let $content := $contentFunc($params, $resolver, $modules, $namespaces)
-                let $params := map:merge((
-                    $params,
-                    map {
-                        "content": $content
-                    }
-                ))
-                return
-                    tmpl:process-blocks($template?content, $params, $plainText, $resolver, $modules, $namespaces, $blocks)
-            else
-                error($tmpl:ERROR_EXTENDS, "Extended template " || $path || " not found")
-};
-
-declare %private function tmpl:process-blocks($template as xs:string, $params as map(*), $plainText as xs:boolean?,
-    $resolver as function(*), $modules as map(*)*, $namespaces as map(*)?, $blocks as element()) {
-    (: parse the extended template :)
-    let $ast := tmpl:tokenize($template) => tmpl:parse($resolver)
-    (: replace blocks in template with corresponding blocks of child :)
-    let $modifiedAst := tmpl:replace-blocks($ast, $blocks)
-    let $modules := map:merge((
-        $modules,
-        if (exists($params?($tmpl:CONFIG_PROPERTY))) then
-            $params?($tmpl:CONFIG_PROPERTY)?modules
-        else
-            (),
-        tmpl:imported-modules($modifiedAst, $resolver)
-    ))
-    let $mode := if ($plainText) then $tmpl:TEXT_MODE else $tmpl:XML_MODE
-    let $code := tmpl:generate($mode, $modifiedAst, $params, $modules, $namespaces, $blocks, (), $resolver)
-    return
-        try {
-            tmpl:eval($code, $ast, $params, $resolver, $modules, $namespaces)
-        } catch * {
-            error($tmpl:ERROR_EXTENDS, $err:description, $err:value)
-        }
-};
-
-declare %private function tmpl:replace-blocks($ast as node()*, $blocks as element()) {
-    for $node in $ast
-    return
-        typeswitch($node)
-            case element(block) return
-                if ($blocks/block[@name = $node/@name]) then (
-                    try {
-                        $blocks/block[@name = $node/@name]/node()
-                    } catch * {
-                        $blocks/block[@name = $node/@name]/node()
-                    }
-                ) else
-                    $node/node()
-            case element() return
-                element { node-name($node) } {
-                    $node/@*,
-                    tmpl:replace-blocks($node/node(), $blocks)
-                }
-            default return
-                $node
 };
