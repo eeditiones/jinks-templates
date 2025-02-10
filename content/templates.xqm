@@ -328,7 +328,7 @@ declare %private function tmpl:do-parse($tokens as item()*, $resolver as functio
                 )
                 case element(import) return
                     ($next, tmpl:do-parse(tail($tokens), $resolver))
-                case element(endfor) | element(endlet) | element(endif) | element(endblock) | element(comment) return
+                case element(endfor) | element(endlet) | element(endif) | element(endblock) | element(endtemplate) | element(comment) return
                     ()
                 default return
                     ($next, tmpl:do-parse(tail($tokens), $resolver))
@@ -351,11 +351,11 @@ declare function tmpl:generate($config as map(*), $ast as element(ast), $params 
         {
             for $block in $incomingBlocks[not(@name = 'content')]
             return
-                <block name="{$block/@name}">
+                <template name="{$block/@name}">
                 {
                     tmpl:escape-block($block/node())
                 }
-                </block>
+                </template>
         }
         </blocks>
     return
