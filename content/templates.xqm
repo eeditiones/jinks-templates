@@ -97,6 +97,7 @@ declare variable $tmpl:TEXT_MODE := map {
  : List of regular expressions used by the tokenizer
  :)
 declare variable $tmpl:TOKEN_REGEX := [
+    "\[%\s*(raw)\s*%\](.*?)\[%\s*(endraw)\s*%\]",
     "\[%\s*(end\w+)\s*%\]",
     "\[%\s*(for)\s+(\$\w+)\s+in\s+(.+?)%\]",
     "\[%\s*(let)\s+(\$\w+)\s+=\s+(.+?)%\]",
@@ -173,6 +174,8 @@ declare function tmpl:tokenize($input as xs:string) {
                         <block name="{$token/fn:group[2] => normalize-space()}"/>
                     case "endblock" return
                         <endblock/>
+                    case "raw" return
+                        <raw>{ $token/fn:group[2] => normalize-space() }</raw>
                     case "import" return
                         <import uri="{$token/fn:group[2] => normalize-space()}" as="{$token/fn:group[3] => normalize-space()}">
                         { 
@@ -309,6 +312,11 @@ declare %private function tmpl:do-parse($tokens as item()*, $resolver as functio
                         }
                         </block>,
                         tmpl:do-parse($tail, $resolver)
+                    )
+                case element(raw) return
+                    (
+                        $next/node(),
+                        tmpl:do-parse(tail($tokens), $resolver)
                     )
                 case element(include) return (
                     (: check if we can do a static include :)

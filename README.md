@@ -38,6 +38,7 @@ Supported template expressions are:
 | `[% block name %] … [% endblock %]` | Defines a named block, optionally containing default content to be displayed if there's no `template` addressing this block.|
 | `[% template name %] … [% endtemplate %]` | Contains content to be appended to the block with the same name. |
 | `[% import "uri" as "prefix" at "path" %]` | Import an XQuery module so its functions/variables can be used in template expressions. |
+| `[% raw %]…[% endraw %]` | Include the contained text as is, without parsing for templating expressions |
 | `[# … #]` | Single or multi-line comment: content will be discarded |
 
 `expr` must be a valid XPath expression.
