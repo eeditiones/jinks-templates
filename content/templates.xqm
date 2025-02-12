@@ -705,7 +705,7 @@ declare %private function tmpl:external-blocks($config as map(*), $params as map
                 error($tmpl:ERROR_INCLUDE, "Included template " || $file || " not found")
     else
         (),
-    if (map:contains($config, $tmpl:CONFIG_TEMPLATES)) then
+    if (map:get($config, $tmpl:CONFIG_TEMPLATES)) then
         map:for-each($config?($tmpl:CONFIG_TEMPLATES), function($key, $expr) {
             <template name="{$key}">{$expr}</template>
         })
