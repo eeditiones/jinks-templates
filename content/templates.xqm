@@ -22,6 +22,7 @@ declare variable $tmpl:CONFIG_NAMESPACES := "namespaces";
 declare variable $tmpl:CONFIG_EXTENDS := "extends";
 declare variable $tmpl:CONFIG_USE := "use";
 declare variable $tmpl:CONFIG_IGNORE_USE := "ignoreUse";
+declare variable $tmpl:CONFIG_TEMPLATES := "templates";
 
 declare variable $tmpl:XML_MODE := map {
     "xml": true(),
@@ -698,9 +699,16 @@ declare %private function tmpl:external-blocks($config as map(*), $params as map
         let $template := $resolver($file)
         return
             if (exists($template)) then
-                (tmpl:tokenize($template?content) => tmpl:parse($resolver))//template
+                let $externalBlocks := (tmpl:tokenize($template?content) => tmpl:parse($resolver))//template
+                return $externalBlocks
             else
                 error($tmpl:ERROR_INCLUDE, "Included template " || $file || " not found")
+    else
+        (),
+    if (map:contains($config, $tmpl:CONFIG_TEMPLATES)) then
+        map:for-each($config?($tmpl:CONFIG_TEMPLATES), function($key, $expr) {
+            <template name="{$key}">{$expr}</template>
+        })
     else
         ()
 };
