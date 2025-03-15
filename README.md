@@ -236,6 +236,7 @@ The library has to merge different source maps into a single context map. This w
 
 * properties with an atomic value will overwrite earlier properties with the same key
 * maps will be processed recursively by merging the properties of each incoming into the outgoing map
+    * if you would instead like to entirely replace a map, add a property `$replace` with value `true`
 * arrays are merged by appending the values of each incoming array with duplicates removed. Duplicates are determined as follows:
   * if the array contains atomic values only, they are compared using the `distinct-values` XPath function
   * if the values are maps and each map has an `id` property, they will be deduplicated using the value of this property.

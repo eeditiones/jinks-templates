@@ -23,6 +23,7 @@ declare variable $tmpl:CONFIG_EXTENDS := "extends";
 declare variable $tmpl:CONFIG_USE := "use";
 declare variable $tmpl:CONFIG_IGNORE_USE := "ignoreUse";
 declare variable $tmpl:CONFIG_TEMPLATES := "templates";
+declare variable $tmpl:CONFIG_REPLACE := "$replace";
 
 declare variable $tmpl:XML_MODE := map {
     "xml": true(),
@@ -792,11 +793,14 @@ declare function tmpl:merge-deep($maps as map(*)*) {
         $maps
     else
         map:merge(
-            for $key in distinct-values($maps ! map:keys(.))
+            for $key in distinct-values($maps ! map:keys(.)[. != $tmpl:CONFIG_REPLACE])
             let $mapsWithKey := filter($maps, function($map) { map:contains($map, $key) })
             let $newVal :=
                 if ($mapsWithKey[1]($key) instance of map(*)) then
-                    tmpl:merge-deep($mapsWithKey ! .($key))
+                    if ($mapsWithKey[last()]($key)($tmpl:CONFIG_REPLACE)) then
+                        map:remove($mapsWithKey[last()]($key), $tmpl:CONFIG_REPLACE)
+                    else
+                        tmpl:merge-deep($mapsWithKey ! .($key))
                 else if ($mapsWithKey[1]($key) instance of array(*)) then
                     let $values := $mapsWithKey ! .($key)?*
                     return
