@@ -243,3 +243,73 @@ The library has to merge different source maps into a single context map. This w
   * if the values are maps and at least one does not have an `id` property, they will be serialized to JSON for deduplication
 
 In the case of arrays of maps, we recommend that each map has an `id` property for correct deduplication.
+
+## Testing
+
+This project includes a comprehensive test suite that validates the jinks-templates API functionality. The tests are automatically run on every push and pull request via GitHub Actions.
+
+### Test Suite
+
+The test suite is located in the `test/` directory and includes:
+
+- **Jest-based tests** (`test/jest/__tests__/api.test.js`) - Tests the API endpoints
+- **Template examples** (`test/test-templates.json`) - Contains various template examples with expected outputs
+- **Test application** (`test/app/`) - A minimal eXist-db application for testing
+
+### Running Tests Locally
+
+1. **Prerequisites:**
+   - Node.js 14.0.0 or higher
+   - eXist-db running with the test app deployed
+   - Docker (for containerized testing)
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Run tests:**
+   ```bash
+   # Run all tests
+   npm test
+   
+   # Run with verbose output
+   npm run test:verbose
+   
+   # Run with coverage
+   npm run test:coverage
+   ```
+
+### GitHub Actions Workflow
+
+The project includes a GitHub Actions workflow (`.github/workflows/test.yml`) that automatically:
+
+1. **Builds the Docker image** containing eXist-db and the test application
+2. **Starts the container** and waits for eXist-db to be ready
+3. **Deploys the test application** and waits for it to be accessible
+4. **Runs the test suite** against the running API
+5. **Uploads test results** and coverage reports as artifacts
+6. **Cleans up** containers and images
+
+The workflow runs on:
+- Every push to `main` or `master` branches
+- Every pull request to `main` or `master` branches
+
+### Test Coverage
+
+The test suite covers:
+- ✅ **API Endpoint** - Basic connectivity and response validation
+- ✅ **Template Processing** - Individual tests for each template in `test-templates.json`
+- ✅ **Content Validation** - Comparison of API responses with expected outputs
+- ✅ **Template Modes** - HTML, CSS, and XQuery output modes
+- ✅ **Error Handling** - Invalid inputs and error conditions
+- ✅ **Complex Features** - Includes, imports, frontmatter, and template inheritance
+
+### Test Results
+
+Test results are available as GitHub Actions artifacts and include:
+- JUnit XML test reports
+- Coverage reports
+- Detailed logs for debugging failed tests
+
+The workflow provides comprehensive validation of the jinks-templates API functionality and helps catch regressions early in the development process.

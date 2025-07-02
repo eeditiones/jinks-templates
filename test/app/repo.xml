@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<meta xmlns="http://exist-db.org/xquery/repo">
+    <description>Testing App for Jinks Tempaltes</description>
+    <author>Wolfgang Meier</author>
+    <status>stable</status>
+    <license>GPLv3</license>
+    <copyright>true</copyright>
+    <type>application</type>
+    <target>jinks-templates-test</target>
+    <permissions user="tei" group="tei" password="simple" mode="rw-rw-r--" />
+</meta>
