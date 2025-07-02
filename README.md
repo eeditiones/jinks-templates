@@ -1,14 +1,37 @@
-# A Templating Library in Plain XQuery
+# Jinks Templates
 
-eXist's HTML templating is only usable for HTML, but for app generation tasks we needed a library, which is able to process both, XML/HTML and plain text files. The module was inspired by other templating languages like [nunjucks](https://mozilla.github.io/nunjucks/) or *jsx*, but uses the full power of XPath for expressions. It was also designed to be backwards-compatible with the simpler templating syntax TEI Publisher uses within ODD, further extending the possibilities available within the `pb:template` element in ODD.
+A modern templating engine for eXist-db that brings the full power of XPath and XQuery to template processing. Built for flexibility and performance, Jinks Templates handles HTML, XML, CSS, XQuery, and plain text files with a unified syntax.
 
-Instead of being entirely based on regular expressions, the templating module implements a parser generating an abstract syntax tree (AST) in XML. The AST is then compiled into XQuery code, which - when executed - produces the final output.
+## Overview
+
+Jinks Templates was developed as the core templating engine for _Jinks_, the new app generator for _TEI Publisher_. It extends beyond eXist's older HTML templating capabilities to provide a comprehensive solution for any templating task in the eXist ecosystem.
+
+## Key Features
+
+**🎯 Universal Processing** - Handle any file type with a single templating engine
+
+**⚡ Native XPath/XQuery** - Use familiar XPath expressions directly in templates
+
+**🏗️ Robust Architecture** - AST-based parsing and compilation for better performance
+
+**📝 Frontmatter Support** - Extend template context with embedded configuration
+
+**🔧 Developer Experience** - Familiar syntax inspired by Nunjucks and JSX
+
+## Architecture
+
+Jinks Templates employs a sophisticated two-stage processing pipeline:
+
+1. **Parser** - Converts templates into an XML-based Abstract Syntax Tree
+2. **Compiler** - Transforms the AST into optimized XQuery code
+
+This architecture delivers superior performance, comprehensive error handling, and enhanced debugging capabilities compared to traditional regex-based solutions.
 
 ## Expressions
 
 The template syntax is similar to [nunjucks](https://mozilla.github.io/nunjucks/) or [jinja](https://jinja.palletsprojects.com/en/3.1.x/templates/), but uses the host language for all expressions, therefore giving users the full power of XPath/XQuery.
 
-The templating is passed a context map, which should containing all the information necessary for processing the template expressions. The entire context map can be accessed via variable `$context`. Additionally, each top-level property in the context map is made available as an XQuery variable. So if you have a context map like
+The templating is passed a context map, which should contain all the information necessary for processing the template expressions. The entire context map can be accessed via variable `$context`. Additionally, each top-level property in the context map is made available as an XQuery variable. So if you have a context map like
 
 ```xquery
 map {
@@ -53,14 +76,14 @@ The library supports two modes: **XML/HTML** and **plain text**. They differ in 
 
 The library exposes one main function, `tmpl:process`, which takes 3 arguments:
 
-1. the template to process as a string
-2. the context providing the information to be passed to templating expressions
-3. a configuration map with the following properties:
-   1. `plainText`: should be true for plain text processing (default is false)
-   2. `resolver`: the resolver function to use (see below)
-   3. `modules`: sequence of modules to import (see below)
-   4. `namespaces`: namespace mappings (see below)
-   5. `debug`: if true, `tmpl:process` returns a map with the result, ast and generated XQuery code (default is false)
+1. `xs:string`: the template to process as a string
+2. `map(*)`: the context providing the information to be passed to templating expressions
+3. `map(*)`: a configuration map with the following properties:
+   1. `plainText` (`xs:boolean?`): should be true for plain text processing (default is false)
+   2. `resolver` (`function(xs:string)?`): the resolver function to use (see below)
+   3. `modules` (`map(*)?`): sequence of modules to import (see below)
+   4. `namespaces` (`map(*)?`): namespace mappings (see below)
+   5. `debug` (`xs:boolean?`): if true, `tmpl:process` returns a map with the result, ast and generated XQuery code (default is false)
 
 A simple example:
 
