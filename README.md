@@ -431,14 +431,14 @@ You can specify multiple files in the `"use"` array:
 
 This allows you to build complex layouts by combining multiple modular template components.
 
-## How context maps are merged
+### How context maps are merged
 
-The library has to merge different source maps into a single context map. This works as follows:
+As the template inheritance examples may demonstrate, the library often has to merge different source maps into a single context map. This works as follows:
 
-* properties with an atomic value will overwrite earlier properties with the same key
-* maps will be processed recursively by merging the properties of each incoming into the outgoing map
+* properties with an __atomic value__ will overwrite earlier properties with the same key
+* __maps__ will be processed recursively by merging the properties of each incoming into the outgoing map
     * if you would instead like to entirely replace a map, add a property `$replace` with value `true`
-* arrays are merged by appending the values of each incoming array with duplicates removed. Duplicates are determined as follows:
+* __arrays__ are merged by appending the values of each incoming array with duplicates removed. Duplicates are determined as follows:
   * if the array contains atomic values only, they are compared using the `distinct-values` XPath function
   * if the values are maps and each map has an `id` property, they will be deduplicated using the value of this property.
   * if the values are maps and at least one does not have an `id` property, they will be serialized to JSON for deduplication
