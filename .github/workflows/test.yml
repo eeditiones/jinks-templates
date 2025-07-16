@@ -28,12 +28,8 @@ jobs:
     - name: Build Docker image
       run: docker build --build-arg EXIST_VERSION=${{ matrix.exist-version}} -t jinks-templates-test .
       
-    - name: Start eXist-db container
-      run: |
-        # Clean up any existing container with the same name
-        docker stop jinks-templates-test-container 2>/dev/null || true
-        docker rm jinks-templates-test-container 2>/dev/null || true
-        
+    - name: Start test container
+      run: |        
         docker run -d \
           --name jinks-templates-test-container \
           -p 8080:8080 \
@@ -100,6 +96,9 @@ jobs:
       with:
         name: coverage-report-${{ matrix.exist-version }}
         path: coverage/
+  
+    # - name: Run Cypress e2e test
+    #   uses: cypress-io/github-action@v6
         
     - name: Cleanup containers
       if: always()
