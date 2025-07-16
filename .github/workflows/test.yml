@@ -41,6 +41,7 @@ jobs:
           jinks-templates-test
           
     - name: Wait for eXist-db to be ready
+      timeout-minutes: 3
       run: |
         echo "Waiting for eXist-db to start..."
         timeout=180
@@ -55,14 +56,8 @@ jobs:
           counter=$((counter + 5))
         done
         
-        if [ $counter -eq $timeout ]; then
-          echo "❌ Timeout waiting for eXist-db to start"
-          echo "Container logs:"
-          docker logs jinks-templates-test-container
-          exit 1
-        fi
-        
     - name: Wait for app to be deployed
+      timeout-minutes: 2
       run: |
         echo "Waiting for app to be deployed..."
         timeout=120
@@ -78,17 +73,6 @@ jobs:
           sleep 3
           counter=$((counter + 3))
         done
-        
-        if [ $counter -eq $timeout ]; then
-          echo "❌ Timeout waiting for app to be deployed"
-          echo "Container logs:"
-          docker logs jinks-templates-test-container
-          echo "Testing API endpoint:"
-          curl -v -X POST http://localhost:8080/exist/apps/jinks-templates-test/api/templates/ \
-            -H "Content-Type: application/json" \
-            -d '{"template":"<p>test</p>","params":{},"mode":"html"}' || true
-          exit 1
-        fi
         
     - name: Test API connectivity
       run: |
