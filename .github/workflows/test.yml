@@ -2,14 +2,16 @@ name: Test Suite
 
 on:
   push:
-    branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+    strategy:
+      fail-fast: false
+      matrix:
+        exist-version: [6.2.0, release]
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -24,7 +26,7 @@ jobs:
       run: npm ci
       
     - name: Build Docker image
-      run: docker build -t jinks-templates-test .
+      run: docker build --build-arg EXIST_VERSION=${{ matrix.exist-version}} -t jinks-templates-test .
       
     - name: Start eXist-db container
       run: |
@@ -101,18 +103,18 @@ jobs:
       
     - name: Upload test results
       uses: actions/upload-artifact@v4
-      if: always()
+      if: failure()
       with:
-        name: test-results
+        name: test-results-${{ matrix.exist-version }}
         path: |
           coverage/
           coverage/junit.xml
           
     - name: Upload test coverage
       uses: actions/upload-artifact@v4
-      if: always()
+      if: failure()
       with:
-        name: coverage-report
+        name: coverage-report-${{ matrix.exist-version }}
         path: coverage/
         
     - name: Cleanup containers
