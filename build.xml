@@ -11,6 +11,6 @@
     </target>
     <target name="xar">
         <mkdir dir="${build.dir}"/>
-        <zip basedir="." destfile="${build.dir}/${project.app}.xar" excludes="${build.dir}/*"/>
+        <zip basedir="." destfile="${build.dir}/${project.app}.xar" excludes="${build.dir}/*,.env"/>
     </target>
 </project>
