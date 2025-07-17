@@ -4,6 +4,7 @@ on:
   push:
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -15,15 +16,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: 'npm'
-        
-    - name: Install dependencies
-      run: npm ci
       
     - name: Build Docker image
       run: docker build --build-arg EXIST_VERSION=${{ matrix.exist-version}} -t jinks-templates-test .
@@ -37,10 +29,10 @@ jobs:
           jinks-templates-test
           
     - name: Wait for eXist-db to be ready
-      timeout-minutes: 3
+      timeout-minutes: 1
       run: |
         echo "Waiting for eXist-db to start..."
-        timeout=180
+        timeout=60
         counter=0
         while [ $counter -lt $timeout ]; do
           if curl -f http://localhost:8080/exist/ > /dev/null 2>&1; then
@@ -51,54 +43,9 @@ jobs:
           sleep 5
           counter=$((counter + 5))
         done
-        
-    - name: Wait for app to be deployed
-      timeout-minutes: 2
-      run: |
-        echo "Waiting for app to be deployed..."
-        timeout=120
-        counter=0
-        while [ $counter -lt $timeout ]; do
-          if curl -f -X POST http://localhost:8080/exist/apps/jinks-templates-test/api/templates/ \
-            -H "Content-Type: application/json" \
-            -d '{"template":"<p>test</p>","params":{},"mode":"html"}' > /dev/null 2>&1; then
-            echo "✅ App is deployed and ready!"
-            break
-          fi
-          echo "⏳ Waiting for app deployment... ($counter/$timeout seconds)"
-          sleep 3
-          counter=$((counter + 3))
-        done
-        
-    - name: Test API connectivity
-      run: |
-        echo "Testing API connectivity..."
-        curl -X POST http://localhost:8080/exist/apps/jinks-templates-test/api/templates/ \
-          -H "Content-Type: application/json" \
-          -d '{"template":"<p>Hello World</p>","params":{},"mode":"html"}' \
-          -w "\nHTTP Status: %{http_code}\n"
-        
-    - name: Run test suite
-      run: npm test
-      
-    - name: Upload test results
-      uses: actions/upload-artifact@v4
-      if: failure()
-      with:
-        name: test-results-${{ matrix.exist-version }}
-        path: |
-          coverage/
-          coverage/junit.xml
-          
-    - name: Upload test coverage
-      uses: actions/upload-artifact@v4
-      if: failure()
-      with:
-        name: coverage-report-${{ matrix.exist-version }}
-        path: coverage/
   
-    # - name: Run Cypress e2e test
-    #   uses: cypress-io/github-action@v6
+    - name: Run Cypress e2e test
+      uses: cypress-io/github-action@v6
         
     - name: Cleanup containers
       if: always()

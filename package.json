@@ -4,10 +4,7 @@
   "description": "Test suite for jinks-templates API",
   "main": "test/run-tests.js",
   "scripts": {
-    "test": "jest --config test/jest/jest.config.js",
-    "test:watch": "jest --config test/jest/jest.config.js --watch",
-    "test:verbose": "jest --config test/jest/jest.config.js --verbose",
-    "test:coverage": "jest --config test/jest/jest.config.js --coverage",
+    "test": "npx cypress run",
     "test:docker": "./scripts/test-docker.sh"
   },
   "keywords": [
@@ -22,7 +19,7 @@
     "node": ">=14.0.0"
   },
   "devDependencies": {
-    "jest": "^29.7.0",
-    "jest-junit": "^16.0.0"
+    "chai-html": "^3.1.0",
+    "cypress": "^14.5.2"
   }
-} 
+}
