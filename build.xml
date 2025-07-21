@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project default="xar" name="tei-publisher-generator">
+<project default="xar" name="jinks-templates">
     <xmlproperty file="expath-pkg.xml" />
     <property name="project.version" value="${package(version)}" />
     <property name="project.app" value="${package(abbrev)}" />
@@ -11,6 +11,18 @@
     </target>
     <target name="xar" depends="clean">
         <mkdir dir="${build.dir}" />
-        <zip basedir="." destfile="${build.dir}/${project.app}.xar" excludes="${build.dir}/*,.env" />
+        <zip basedir="." destfile="${build.dir}/${project.app}.xar">
+            <exclude name="${build.dir}/**" />
+            <exclude name=".github/**" />
+            <exclude name="node_modules/**" />
+            <exclude name=".gitignore" />
+            <exclude name=".dockerignore" />
+            <exclude name="test/cypress/screenshots/**" />
+            <exclude name="test/cypress/downloads/**" />
+            <exclude name="test/cypress/videos/**" />
+            <exclude name=".env" />
+            <exclude name="scripts/**" />
+            <exclude name=".vscode/**" />
+        </zip>
     </target>
 </project>
