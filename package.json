@@ -1,6 +1,5 @@
 {
   "name": "jinks-templates",
-  "version": "1.0.0",
   "description": "Test suite for jinks-templates API",
   "scripts": {
     "test": "npx cypress run",
