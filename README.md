@@ -507,3 +507,46 @@ The project includes a GitHub Actions workflow (`.github/workflows/test.yml`) th
 The workflow runs on:
 - Every push
 - Every pull request to `main` or `master` branches
+
+## Release Procedure
+
+This project uses [semantic-release](https://semantic-release.gitbook.io/) to automate versioning and publishing of releases on GitHub. The process is fully automated and based on commit messages following the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+
+### Branches
+
+- **master**: Stable releases are published from this branch.
+- **beta**: Pre-releases (e.g., `1.0.0-beta.1`) are published from this branch.
+
+### How Releases Are Triggered
+
+- Every push or pull request to `master` or `beta` triggers the test workflow.
+- When the test workflow completes successfully, the release workflow runs.
+- The release workflow analyzes commit messages to determine the next version:
+  - **fix:** triggers a patch release (e.g., 1.0.1)
+  - **feat:** triggers a minor release (e.g., 1.1.0)
+  - **BREAKING CHANGE:** triggers a major release (e.g., 2.0.0)
+
+### Pre-releases
+
+- Commits pushed to the `beta` branch will create pre-releases (e.g., `1.0.0-beta.1`).
+
+
+### Local Dry Run of Semantic Release
+
+To simulate a release locally without publishing:
+
+1. Obtain a GitHub token with `repo` permissions.
+2. Run the following command in your project root (replace `your_token_here`):
+
+   ```sh
+   GH_TOKEN=your_token_here npx semantic-release --dry-run
+   ```
+
+This will show what semantic-release would do, without making any changes or publishing a release.
+
+### Release Artifacts
+
+- The build process creates a `.xar` package in the `build/` directory.
+- This package is attached to each GitHub release automatically.
+
+For more details, see the configuration in `.releaserc` and `.github/workflows/deploy.yml`.
