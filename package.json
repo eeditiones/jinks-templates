@@ -19,7 +19,10 @@
     "node": ">=14.0.0"
   },
   "devDependencies": {
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/git": "^10.0.1",
     "chai-html": "^3.1.0",
-    "cypress": "^14.5.2"
+    "cypress": "^14.5.2",
+    "semantic-release": "^24.2.7"
   }
 }
