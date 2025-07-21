@@ -1,8 +1,7 @@
 {
-  "name": "jinks-templates-test-suite",
+  "name": "jinks-templates",
   "version": "1.0.0",
   "description": "Test suite for jinks-templates API",
-  "main": "test/run-tests.js",
   "scripts": {
     "test": "npx cypress run",
     "test:docker": "./scripts/test-docker.sh"
@@ -17,6 +16,10 @@
   "license": "MIT",
   "engines": {
     "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eeditiones/jinks-templates.git"
   },
   "devDependencies": {
     "@semantic-release/exec": "^7.1.0",
