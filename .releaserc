@@ -1,0 +1,48 @@
+{
+  "branches": [
+    "master",
+    {
+      "name": "beta",
+      "prerelease": true
+    }
+  ],
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    {
+      "preset": "conventionalcommits"
+    },
+    "@semantic-release/release-notes-generator",
+    {
+      "preset": "conventionalcommits"
+    },
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "ant -Dapp.version=${nextRelease.version} -Drelease=true"
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": [
+          "expath-pkg.xml",
+          "repo.xml"
+        ],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          {
+            "path": "build/jinks-templates.xar",
+            "name": "jinks-templates.xar",
+            "label": "Expath package (jinks-templates.xar)"
+          }
+        ]
+      }
+    ],
+    ["@semantic-release/npm", { "npmPublish": false }]
+  ]
+}

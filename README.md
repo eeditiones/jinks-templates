@@ -447,38 +447,51 @@ In the case of arrays of maps, we recommend that each map has an `id` property f
 
 ## Testing
 
-This project includes a comprehensive test suite that validates the jinks-templates API functionality. The tests are automatically run on every push and pull request via GitHub Actions.
+This project includes a integration test suite that validates the jinks-templates API functionality, as well as smoke tests for compiling and installing the application. The tests are automatically run on every push and pull request via GitHub Actions.
 
 ### Test Suite
 
-The test suite is located in the `test/` directory and includes:
+This project includes a Cypress test suite for the Jinks Templates API. As well as smoke test using bats.
 
-- **Jest-based tests** (`test/jest/__tests__/api.test.js`) - Tests the API endpoints
-- **Template examples** (`test/test-templates.json`) - Contains various template examples with expected outputs
-- **Test application** (`test/app/`) - A minimal eXist-db application for testing
+### Test Coverage
+
+To execute the end-to-end test as small test app located in `test/app/` must be installed.
+
+- **API Contract:** Basic endpoint accessibility and error handling (`api.cy.js`)
+- **Template Processing:** HTML, CSS, and XQuery template rendering (`templateHtml.cy.js`, `templateCss.cy.js`, `templateXquery.cy.js`)
+- **Security:** XSS, XQuery injection, path traversal, header spoofing (`api.security.cy.js`)
 
 ### Running Tests Locally
 
 1. **Prerequisites:**
-   - Node.js 14.0.0 or higher
-   - eXist-db running with the test app deployed
+   - Node.js 22.0.0 or higher
    - Docker (for containerized testing)
+   - Ant (for compiling `.xar` packages)
 
 2. **Install dependencies:**
    ```bash
    npm install
    ```
 
-3. **Run tests:**
-   ```bash
-   # Run all tests
-   npm test
-   
-   # Run with verbose output
-   npm run test:verbose
-   
-   # Run with coverage
-   npm run test:coverage
+3. **Deploy app** 
+   - using the provided Dockerfile:
+   ```shell
+   docker build -t jinks-templates-test .
+   docker run -dit -p 8080:8080 -p 8443:8443 jinks-templates-test
+   ```
+   - compile expath packages manually. From within the root of this repository:
+   ```shell
+   ant
+   cd test/app
+   ant
+   ```
+   Then proceed to install both `.xar` packages into your local exist-db responding on ports `8080` and `8443`
+
+4. **Run tests:**
+   ```sh
+   npx cypress open
+   # or
+   npx cypress run
    ```
 
 ### GitHub Actions Workflow
@@ -487,30 +500,53 @@ The project includes a GitHub Actions workflow (`.github/workflows/test.yml`) th
 
 1. **Builds the Docker image** containing eXist-db and the test application
 2. **Starts the container** and waits for eXist-db to be ready
-3. **Deploys the test application** and waits for it to be accessible
-4. **Runs the test suite** against the running API
-5. **Uploads test results** and coverage reports as artifacts
-6. **Cleans up** containers and images
+3. **Runs the test suite** against the running API
+4. **Uploads test results** and coverage reports as artifacts
+5. **Cleans up** containers and images
 
 The workflow runs on:
-- Every push to `main` or `master` branches
+- Every push
 - Every pull request to `main` or `master` branches
 
-### Test Coverage
+## Release Procedure
 
-The test suite covers:
-- ✅ **API Endpoint** - Basic connectivity and response validation
-- ✅ **Template Processing** - Individual tests for each template in `test-templates.json`
-- ✅ **Content Validation** - Comparison of API responses with expected outputs
-- ✅ **Template Modes** - HTML, CSS, and XQuery output modes
-- ✅ **Error Handling** - Invalid inputs and error conditions
-- ✅ **Complex Features** - Includes, imports, frontmatter, and template inheritance
+This project uses [semantic-release](https://semantic-release.gitbook.io/) to automate versioning and publishing of releases on GitHub. The process is fully automated and based on commit messages following the [Conventional Commits](https://www.conventionalcommits.org/) specification.
 
-### Test Results
+### Branches
 
-Test results are available as GitHub Actions artifacts and include:
-- JUnit XML test reports
-- Coverage reports
-- Detailed logs for debugging failed tests
+- **master**: Stable releases are published from this branch.
+- **beta**: Pre-releases (e.g., `1.0.0-beta.1`) are published from this branch.
 
-The workflow provides comprehensive validation of the jinks-templates API functionality and helps catch regressions early in the development process.
+### How Releases Are Triggered
+
+- Every push or pull request to `master` or `beta` triggers the test workflow.
+- When the test workflow completes successfully, the release workflow runs.
+- The release workflow analyzes commit messages to determine the next version:
+  - **fix:** triggers a patch release (e.g., 1.0.1)
+  - **feat:** triggers a minor release (e.g., 1.1.0)
+  - **BREAKING CHANGE:** triggers a major release (e.g., 2.0.0)
+
+### Pre-releases
+
+- Commits pushed to the `beta` branch will create pre-releases (e.g., `1.0.0-beta.1`).
+
+
+### Local Dry Run of Semantic Release
+
+To simulate a release locally without publishing:
+
+1. Obtain a GitHub token with `repo` permissions.
+2. Run the following command in your project root (replace `your_token_here`):
+
+   ```sh
+   GH_TOKEN=your_token_here npx semantic-release --dry-run
+   ```
+
+This will show what semantic-release would do, without making any changes or publishing a release.
+
+### Release Artifacts
+
+- The build process creates a `.xar` package in the `build/` directory.
+- This package is attached to each GitHub release automatically.
+
+For more details, see the configuration in `.releaserc` and `.github/workflows/deploy.yml`.

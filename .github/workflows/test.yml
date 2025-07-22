@@ -1,37 +1,27 @@
-name: Test Suite
+name: Test
 
 on:
   push:
-    branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+    strategy:
+      fail-fast: false
+      matrix:
+        exist-version: [6.2.0, release]
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        
-    - name: Install dependencies
-      run: npm ci
-      
     - name: Build Docker image
-      run: docker build -t jinks-templates-test .
+      run: docker build --build-arg EXIST_VERSION=${{ matrix.exist-version}} -t jinks-templates-test .
       
-    - name: Start eXist-db container
-      run: |
-        # Clean up any existing container with the same name
-        docker stop jinks-templates-test-container 2>/dev/null || true
-        docker rm jinks-templates-test-container 2>/dev/null || true
-        
+    - name: Start test container
+      run: |        
         docker run -d \
           --name jinks-templates-test-container \
           -p 8080:8080 \
@@ -39,9 +29,10 @@ jobs:
           jinks-templates-test
           
     - name: Wait for eXist-db to be ready
+      timeout-minutes: 1
       run: |
         echo "Waiting for eXist-db to start..."
-        timeout=180
+        timeout=60
         counter=0
         while [ $counter -lt $timeout ]; do
           if curl -f http://localhost:8080/exist/ > /dev/null 2>&1; then
@@ -52,68 +43,9 @@ jobs:
           sleep 5
           counter=$((counter + 5))
         done
-        
-        if [ $counter -eq $timeout ]; then
-          echo "❌ Timeout waiting for eXist-db to start"
-          echo "Container logs:"
-          docker logs jinks-templates-test-container
-          exit 1
-        fi
-        
-    - name: Wait for app to be deployed
-      run: |
-        echo "Waiting for app to be deployed..."
-        timeout=120
-        counter=0
-        while [ $counter -lt $timeout ]; do
-          if curl -f -X POST http://localhost:8080/exist/apps/jinks-templates-test/api/templates/ \
-            -H "Content-Type: application/json" \
-            -d '{"template":"<p>test</p>","params":{},"mode":"html"}' > /dev/null 2>&1; then
-            echo "✅ App is deployed and ready!"
-            break
-          fi
-          echo "⏳ Waiting for app deployment... ($counter/$timeout seconds)"
-          sleep 3
-          counter=$((counter + 3))
-        done
-        
-        if [ $counter -eq $timeout ]; then
-          echo "❌ Timeout waiting for app to be deployed"
-          echo "Container logs:"
-          docker logs jinks-templates-test-container
-          echo "Testing API endpoint:"
-          curl -v -X POST http://localhost:8080/exist/apps/jinks-templates-test/api/templates/ \
-            -H "Content-Type: application/json" \
-            -d '{"template":"<p>test</p>","params":{},"mode":"html"}' || true
-          exit 1
-        fi
-        
-    - name: Test API connectivity
-      run: |
-        echo "Testing API connectivity..."
-        curl -X POST http://localhost:8080/exist/apps/jinks-templates-test/api/templates/ \
-          -H "Content-Type: application/json" \
-          -d '{"template":"<p>Hello World</p>","params":{},"mode":"html"}' \
-          -w "\nHTTP Status: %{http_code}\n"
-        
-    - name: Run test suite
-      run: npm test
-      
-    - name: Upload test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: test-results
-        path: |
-          coverage/
-          coverage/junit.xml
-          
-    - name: Upload test coverage
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: coverage-report
-        path: coverage/
+  
+    - name: Run Cypress e2e test
+      uses: cypress-io/github-action@v6
         
     - name: Cleanup containers
       if: always()
