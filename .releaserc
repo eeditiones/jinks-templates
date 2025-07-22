@@ -40,7 +40,9 @@
             "name": "jinks-templates.xar",
             "label": "Expath package (jinks-templates.xar)"
           }
-        ]
+        ],
+        "successComment": false,
+        "failTitle": false
       }
     ],
     ["@semantic-release/npm", { "npmPublish": false }]
