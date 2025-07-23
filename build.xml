@@ -4,25 +4,66 @@
     <property name="project.version" value="${package(version)}" />
     <property name="project.app" value="${package(abbrev)}" />
     <property name="build.dir" value="build" />
+    <property name="app.version" value="1.0.0" />
+    <property name="app.version" value="${app.version}" />
+
+    <condition property="is-release">
+        <equals arg1="${release}" arg2="true" />
+    </condition>
+
+    <target name="release.true" if="is-release">
+        <echo>Calculating git revision info for release</echo>
+    </target>
+
+    <target name="release.false" unless="is-release">
+        <echo>Not a release, moving on ...</echo>
+    </target>
+
+    <target name="check-release" depends="release.true, release.false">
+    </target>
+
     <target name="clean">
+        <echo>Deleting xar files...</echo>
         <delete includeemptydirs="true" failonerror="false">
             <fileset dir="${build.dir}" includes="**/*" />
         </delete>
     </target>
-    <target name="xar" depends="clean">
+
+    <target name="xar" depends="clean,check-release">
+        <echo>Creating build folder...</echo>
         <mkdir dir="${build.dir}" />
-        <zip basedir="." destfile="${build.dir}/${project.app}.xar">
-            <exclude name="${build.dir}/**" />
-            <exclude name=".github/**" />
-            <exclude name="node_modules/**" />
-            <exclude name=".gitignore" />
-            <exclude name=".dockerignore" />
-            <exclude name="test/cypress/screenshots/**" />
-            <exclude name="test/cypress/downloads/**" />
-            <exclude name="test/cypress/videos/**" />
-            <exclude name=".env" />
-            <exclude name="scripts/**" />
-            <exclude name=".vscode/**" />
+        <!-- Copy the original expath-pkg.xml to the build directory -->
+        <echo>Creating temporary files...</echo>
+        <copy file="expath-pkg.xml" tofile="${build.dir}/expath-pkg.xml" overwrite="true" />
+        <!-- Update the version in the copied file -->
+        <replaceregexp file="${build.dir}/expath-pkg.xml"
+            match='version="(.*)" '
+            replace='version="${app.version}" '
+            byline="true" />
+        <echo>Update Version with: ${app.version}</echo>
+        <!-- Create the xar archive -->
+        <echo>Creating xar file...</echo>
+        <zip destfile="${build.dir}/${project.app}.xar">
+            <fileset dir=".">
+                <exclude name="${build.dir}/**" />
+                <exclude name=".github/**" />
+                <exclude name="node_modules/**" />
+                <exclude name=".gitignore" />
+                <exclude name=".dockerignore" />
+                <exclude name="test/cypress/screenshots/**" />
+                <exclude name="test/cypress/downloads/**" />
+                <exclude name="test/cypress/videos/**" />
+                <exclude name=".env" />
+                <exclude name=".releaserc" />
+                <exclude name="scripts/**" />
+                <exclude name=".vscode/**" />
+                <exclude name="expath-pkg.xml" />
+            </fileset>
+            <zipfileset dir="${build.dir}" includes="expath-pkg.xml" fullpath="expath-pkg.xml" />
         </zip>
+
+        <!-- Clean up the temporary file -->
+        <echo>Deleting temporary files...</echo>
+        <delete file="${build.dir}/expath-pkg.xml" />
     </target>
 </project>
