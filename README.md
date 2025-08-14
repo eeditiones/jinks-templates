@@ -214,7 +214,7 @@ This will overwrite the `title` and `author` properties of the static context ma
 
 ## Configuring the templating in frontmatter
 
-Some of the configuration parameters for the templating can also be set via the frontmatter instead of providing them to the `tmpl:process` XQuery function. In particular this includes `modules`, `namespaces`. 
+Some of the configuration parameters for the templating can also be set via the frontmatter instead of providing them to the `tmpl:process` XQuery function. In particular this includes `modules`, `namespaces`.
 
 Additionally, you can enable template inheritance in the frontmatter using `extends` (see next section).
 
@@ -253,7 +253,7 @@ Template inheritance allows you to create a hierarchy of templates where child t
 ### How It Works
 
 When a template extends another template:
-- **Named templates** in the child replace corresponding blocks in the parent
+- **Named templates** in the child fill the corresponding blocks in the parent
 - **Remaining content** is injected into the `content` block of the parent
 - **Multiple levels** of inheritance are supported
 
@@ -384,6 +384,10 @@ The final rendered output combines all templates:
 - **`"use": ["path"]`** - Imports additional template files for block definitions
 - **Frontmatter** - Configures inheritance and other templating options
 
+### Overwriting Blocks
+
+If there is more than one `[% template %]` with the same name, the content of all of them will be concatenated into the corresponding `[% block %]` placeholder. However, sometimes you may want to override content provided by earlier templates in the inheritance chain. To do so, use the special `[% template! name %]` directive.
+
 ### The `"use"` Directive
 
 The `"use"` directive in frontmatter allows you to import additional template files that contain block definitions. This is particularly useful for:
@@ -473,7 +477,7 @@ To execute the end-to-end test as small test app located in `test/app/` must be 
    npm install
    ```
 
-3. **Deploy app** 
+3. **Deploy app**
    - using the provided Dockerfile:
    ```shell
    docker build -t jinks-templates-test .

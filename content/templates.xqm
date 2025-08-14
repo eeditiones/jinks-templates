@@ -32,7 +32,7 @@ declare variable $tmpl:XML_MODE := map {
             let $firstChild := $node/node()[not(matches(., "^[\s\n]+$"))][1]
             return
                 if (
-                    $firstChild instance of element() and 
+                    $firstChild instance of element() and
                     not(
                         $firstChild instance of element(else) or
                         $firstChild instance of element(elif)
@@ -46,7 +46,7 @@ declare variable $tmpl:XML_MODE := map {
             let $firstChild := $node/node()[not(matches(., "^[\s\n]+$"))][1]
             return
                 if (
-                    $firstChild instance of element() and 
+                    $firstChild instance of element() and
                     not(
                         $firstChild instance of element(else) or
                         $firstChild instance of element(elif)
@@ -108,7 +108,7 @@ declare variable $tmpl:TOKEN_REGEX := [
     "\[%\s*(else)\s*%\]",
     "\[%\s*(include)\s+(.+?)%\]",
     "\[%\s*(block)\s+(.+?)%\]",
-    "\[%\s*(template)\s+(.+?)%\]",
+    "\[%\s*(template!?)\s+(.+?)%\]",
     '\[%\s*(import)\s+["''](.+?)["'']\s+as\s+["'']([\w\-_]+)["''](?:\s+at\s+["''](.+?)["''])?\s*%\]',
     "\[(\[)(.+?)\]\]"
 ];
@@ -118,7 +118,7 @@ declare variable $tmpl:TOKEN_REGEX := [
  :)
 declare function tmpl:frontmatter($input as xs:string) {
     let $analyzed := analyze-string($input, "^(?:\s*.+?>)?\s*---(json|)\s*\n(.*?)\n\s*---.*$", "s")
-    return 
+    return
         if (count($analyzed//fn:group) = 2) then
             let $type := $analyzed//fn:group[@nr = 1]
             return
@@ -170,6 +170,8 @@ declare function tmpl:tokenize($input as xs:string) {
                         <include target="{$token/fn:group[2] => normalize-space()}"/>
                     case "template" return
                         <template name="{$token/fn:group[2] => normalize-space()}"/>
+                    case "template!" return
+                        <template name="{$token/fn:group[2] => normalize-space()}" overwrite="true"/>
                     case "endtemplate" return
                         <endtemplate/>
                     case "block" return
@@ -180,11 +182,11 @@ declare function tmpl:tokenize($input as xs:string) {
                         <raw>{ $token/fn:group[2] => normalize-space() }</raw>
                     case "import" return
                         <import uri="{$token/fn:group[2] => normalize-space()}" as="{$token/fn:group[3] => normalize-space()}">
-                        { 
+                        {
                             if (count($token/fn:group) > 3) then
                                 attribute at {$token/fn:group[4] => normalize-space()}
-                            else 
-                                () 
+                            else
+                                ()
                         }
                         </import>
                     case "[" return
@@ -343,7 +345,7 @@ declare %private function tmpl:do-parse($tokens as item()*, $resolver as functio
  : Depending on the desired output format (XML/HTML or text), $config should be either:
  : $tmpl:XML_MODE or $tmpl:TEXT_MODE.
  :)
-declare function tmpl:generate($config as map(*), $ast as element(ast), $params as map(*), $modules as map(*)*, 
+declare function tmpl:generate($config as map(*), $ast as element(ast), $params as map(*), $modules as map(*)*,
     $namespaces as map(*)?,$resolver as function(*)?,  $incomingBlocks as element(template)*) {
     let $prolog := tmpl:prolog($ast, $modules, $namespaces, $resolver) => string-join('&#10;')
     let $body := $config?block?start(()) || string-join(tmpl:emit($config, $ast)) || $config?block?end(())
@@ -355,6 +357,7 @@ declare function tmpl:generate($config as map(*), $ast as element(ast), $params 
             return
                 <template name="{$block/@name}">
                 {
+                    $block/@overwrite,
                     tmpl:escape-block($block/node())
                 }
                 </template>
@@ -642,7 +645,12 @@ declare %private function tmpl:expand-blocks($ast as node()*, $blocks as element
                     let $blocks := $blocks[@name = $node/@name]
                     return
                         if ($blocks) then
-                            for $block in reverse($blocks)
+                            let $selectedBlocks :=
+                                if ($blocks[@overwrite='true']) then
+                                    $blocks[@overwrite='true']
+                                else
+                                    $blocks
+                            for $block in reverse($selectedBlocks)
                             return
                                 if ($block/@unwrap) then
                                     <content unwrap="true">{ $block/node() }</content>
@@ -748,7 +756,7 @@ declare function tmpl:process($template as xs:string, $params as map(*), $config
             map {
                 "ast": $ast?ast,
                 "xquery": $code,
-                "result": 
+                "result":
                     if (not($config?plainText)) then
                         serialize($result, map { "indent": true() })
                     else
@@ -774,8 +782,8 @@ declare %private function tmpl:distinct-values($values) {
                 return
                     $byId($id)
             else
-                let $jsonValues := 
-                    for $value in $values 
+                let $jsonValues :=
+                    for $value in $values
                     return
                         serialize($value, map { "method": "json", "indent": false() })
                 for $value in distinct-values($jsonValues)
@@ -824,7 +832,7 @@ declare function tmpl:include-static($path as xs:string, $resolver as function(*
                 error($tmpl:ERROR_INCLUDE, "Included template " || $path || " not found")
 };
 
-declare function tmpl:include($path as xs:string, $resolver as function(*)?, $params as map(*), 
+declare function tmpl:include($path as xs:string, $resolver as function(*)?, $params as map(*),
     $plainText as xs:boolean?, $modules as map(*)*, $namespaces as map(*)?, $blocks as element()*) {
     if (empty($resolver)) then
         error($tmpl:ERROR_INCLUDE, "Include is not available in this templating context")
@@ -833,8 +841,8 @@ declare function tmpl:include($path as xs:string, $resolver as function(*)?, $pa
         return
             if (exists($template)) then
                 let $result := tmpl:process($template?content, $params, map {
-                    $tmpl:CONFIG_PLAIN_TEXT: $plainText, 
-                    $tmpl:CONFIG_RESOLVER: $resolver, 
+                    $tmpl:CONFIG_PLAIN_TEXT: $plainText,
+                    $tmpl:CONFIG_RESOLVER: $resolver,
                     $tmpl:CONFIG_DEBUG: false(),
                     $tmpl:CONFIG_MODULES: $modules,
                     $tmpl:CONFIG_NAMESPACES: $namespaces
