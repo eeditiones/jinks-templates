@@ -23,9 +23,9 @@ COPY --from=builder /jinks-templates/build/*.xar /exist/autodeploy/
 ARG HTTP_PORT=8080
 ARG HTTPS_PORT=8443
 
-ENV JDK_JAVA_OPTIONS="\
-    -Dteipublisher.context-path=${CONTEXT_PATH} \
-    -Dteipublisher.proxy-caching=${PROXY_CACHING}"
+# ENV JDK_JAVA_OPTIONS="\
+#     -Dteipublisher.context-path=${CONTEXT_PATH} \
+#     -Dteipublisher.proxy-caching=${PROXY_CACHING}"
 
 # pre-populate the database by launching it once and change default pw
 RUN [ "java", "org.exist.start.Main", "client", "--no-gui",  "-l", "-u", "admin", "-P", "" ]
