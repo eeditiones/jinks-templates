@@ -78,8 +78,8 @@ describe('Jinks Templates API - General API Contract', () => {
     })
   })
 
-  // TODO(DP): see #13
-  it.skip('should return error for invalid mode', () => {
+  // see #13
+  it('should treat invalid mode as xml', () => {
     cy.request({
       method: 'POST',
       url: '/',
@@ -90,8 +90,8 @@ describe('Jinks Templates API - General API Contract', () => {
       },
       failOnStatusCode: false
     }).then(response => {
-      expect(response.status).not.to.eq(200)
-      expect(response.body.result).to.have.property('error')
+      expect(response.status).to.eq(200)
+      expect(response.body).to.have.property('result')
     })
   })
 })
