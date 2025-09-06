@@ -4,7 +4,7 @@ A modern templating engine for eXist-db that brings the full power of XPath and 
 
 ## Overview
 
-Jinks Templates was developed as the core templating engine for _Jinks_, the new app generator for _TEI Publisher_. It extends beyond eXist's older HTML templating capabilities to provide a comprehensive solution for any templating task in the eXist ecosystem.
+Jinks Templates was developed as the core templating engine for _[Jinks](https://github.com/eeditiones/jinks)_, the new app generator for _[TEI Publisher](https://teipublisher.org)_. It extends beyond eXist's older HTML templating capabilities to provide a comprehensive solution for any templating task in the eXist ecosystem.
 
 ## Key Features
 
@@ -15,6 +15,8 @@ Jinks Templates was developed as the core templating engine for _Jinks_, the new
 **🏗️ Robust Architecture** - AST-based parsing and compilation for better performance
 
 **📝 Frontmatter Support** - Extend template context with embedded configuration
+
+**🔗 Template Inheritance** - Create a hierarchy of templates with block-based inheritance
 
 **🔧 Developer Experience** - Familiar syntax inspired by Nunjucks and JSX
 
@@ -66,7 +68,7 @@ Supported template expressions are:
 
 `expr` must be a valid XPath expression.
 
-For some real pages built with jinks-templates, check the main [jinks app manager](https://github.com/eeditiones/jinks/tree/main/pages). This app also includes a playground and demo for jinks-templates.
+For some real pages built with jinks-templates, check the app manager of TEI Publisher, [jinks](https://github.com/eeditiones/jinks/tree/main/pages). This app also includes a playground and demo for jinks-templates.
 
 ## Output Modes
 
@@ -335,12 +337,14 @@ Here's a complete example using the test application templates:
 
 #### 5. Additional Blocks (`pages/blocks.html`)
 ```html
-<div>
+<template>
     [% template menu %]
     <li>blocks.html</li>
     [% endtemplate %]
-</div>
+</template>
 ```
+
+This is a file which contains only templates, no other content (see section on the *use* directive below).
 
 ### Result
 
@@ -390,11 +394,11 @@ If there is more than one `[% template %]` with the same name, the content of al
 
 ### The `"use"` Directive
 
-The `"use"` directive in frontmatter allows you to import additional template files that contain block definitions. This is particularly useful for:
+The `"use"` directive in frontmatter allows you to import additional files containing only template definitions, but no other content. This is particularly useful for adding features without modifying existing templates.
 
-- **Modular template components** - Reusable blocks across multiple templates
-- **Organizing complex layouts** - Separating concerns into different files
-- **Extending functionality** - Adding new blocks without modifying existing templates
+ Use it to dynamically inject content into existing blocks, without having to specify an explicit include in the target template. If blocks are configured in the main context, additional templates will be picked up by any page which has the corresponding block placeholder. It does not need to know if additional templates are available or not.
+
+TEI Publisher features use this to dynamically load specific views into the sidebars. For example, if the `iiif` feature is enabled, it will load a IIIF viewer into one of the sidebars.
 
 #### How `"use"` Works
 
@@ -408,14 +412,16 @@ When you specify `"use": ["pages/blocks.html"]` in your frontmatter:
 
 In our example, `pages/blocks.html` contains:
 ```html
-<div>
+<template>
     [% template menu %]
     <li>blocks.html</li>
     [% endtemplate %]
-</div>
+</template>
 ```
 
 When referenced with `"use": ["pages/blocks.html"]`, the `menu` template becomes available and gets injected into the menu block in the inheritance chain, resulting in an additional menu item.
+
+Note that we use `<template>` as the wrapper element to indicate that this file does not contain any content that should be rendered directly. This is not necessary, but it can help with clarity and organization.
 
 #### Multiple `"use"` Files
 
@@ -433,15 +439,13 @@ You can specify multiple files in the `"use"` array:
 }
 ```
 
-This allows you to build complex layouts by combining multiple modular template components.
-
 ### How context maps are merged
 
 As the template inheritance examples may demonstrate, the library often has to merge different source maps into a single context map. This works as follows:
 
 * properties with an __atomic value__ will overwrite earlier properties with the same key
 * __maps__ will be processed recursively by merging the properties of each incoming into the outgoing map
-    * if you would instead like to entirely replace a map, add a property `$replace` with value `true`
+    * if you would instead like to entirely replace a map, add a property `$replace` with value `true` into the map
 * __arrays__ are merged by appending the values of each incoming array with duplicates removed. Duplicates are determined as follows:
   * if the array contains atomic values only, they are compared using the `distinct-values` XPath function
   * if the values are maps and each map has an `id` property, they will be deduplicated using the value of this property.
