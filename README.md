@@ -453,6 +453,16 @@ As the template inheritance examples may demonstrate, the library often has to m
 
 In the case of arrays of maps, we recommend that each map has an `id` property for correct deduplication.
 
+## Caveats
+
+When generating XQuery code from a template, do not use string constructors like
+
+```
+``[my long string with `{$variable}` interpolated]``
+```
+
+Jinks uses string constructors in the compiled template and the XQuery parser will choke on other uses within the template text.
+
 ## Testing
 
 This project includes a integration test suite that validates the jinks-templates API functionality, as well as smoke tests for compiling and installing the application. The tests are automatically run on every push and pull request via GitHub Actions.
