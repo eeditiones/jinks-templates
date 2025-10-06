@@ -446,6 +446,7 @@ As the template inheritance examples may demonstrate, the library often has to m
 * properties with an __atomic value__ will overwrite earlier properties with the same key
 * __maps__ will be processed recursively by merging the properties of each incoming into the outgoing map
     * if you would instead like to entirely replace a map, add a property `$replace` with value `true` into the map
+    * if you rather want to replace certain properties of a map, but merge the rest, `$replace` can be an array listing the keys to be replaced. All other keys will be merged recursively.
 * __arrays__ are merged by appending the values of each incoming array with duplicates removed. Duplicates are determined as follows:
   * if the array contains atomic values only, they are compared using the `distinct-values` XPath function
   * if the values are maps and each map has an `id` property, they will be deduplicated using the value of this property.

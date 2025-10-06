@@ -797,6 +797,10 @@ declare %private function tmpl:distinct-values($values) {
  : Deep merge a sequence of maps: maps are merged recursively, arrays are merged by taking the distinct values.
  :)
 declare function tmpl:merge-deep($maps as map(*)*) {
+    tmpl:merge-deep($maps, ())
+};
+
+declare %private function tmpl:merge-deep($maps as map(*)*, $overwriteKeys as xs:string*) {
     if (count($maps) < 2) then
         $maps
     else
@@ -804,16 +808,25 @@ declare function tmpl:merge-deep($maps as map(*)*) {
             for $key in distinct-values($maps ! map:keys(.)[. != $tmpl:CONFIG_REPLACE])
             let $mapsWithKey := filter($maps, function($map) { map:contains($map, $key) })
             let $newVal :=
-                if ($mapsWithKey[1]($key) instance of map(*)) then
-                    if ($mapsWithKey[last()]($key)($tmpl:CONFIG_REPLACE)) then
-                        map:remove($mapsWithKey[last()]($key), $tmpl:CONFIG_REPLACE)
-                    else
-                        tmpl:merge-deep($mapsWithKey ! .($key))
+                if ($key = $overwriteKeys) then
+                    (: Overwrite the key with the value from the last map :)
+                    $mapsWithKey[last()]($key)
+                else if ($mapsWithKey[1]($key) instance of map(*)) then
+                    let $replace := $mapsWithKey[last()]($key)($tmpl:CONFIG_REPLACE)
+                    return
+                        if (exists($replace) and not($replace instance of array(*))) then
+                            (: If $replace is a boolean, return the last map, but remove the $replace key :)
+                            map:remove($mapsWithKey[last()]($key), $tmpl:CONFIG_REPLACE)
+                        else
+                            (: If $replace is an array, merge the maps, but replace the keys listed in $replace with
+                               the key value from the last map :)
+                            tmpl:merge-deep($mapsWithKey ! .($key), $replace?*)
                 else if ($mapsWithKey[1]($key) instance of array(*)) then
                     let $values := $mapsWithKey ! .($key)?*
                     return
                         array { tmpl:distinct-values($values) }
                 else
+                    (: Atomic values: use the value from the last map :)
                     $mapsWithKey[last()]($key)
             return
                 map:entry($key, $newVal)
