@@ -108,7 +108,7 @@ declare variable $tmpl:TOKEN_REGEX := [
     "\[%\s*(else)\s*%\]",
     "\[%\s*(include)\s+(.+?)%\]",
     "\[%\s*(block)\s+(.+?)%\]",
-    "\[%\s*(template!?)\s+(.+?)%\]",
+    "\[%\s*(template!?)\s+(\S+?)(?:\s+(.*?))?%\]",
     '\[%\s*(import)\s+["''](.+?)["'']\s+as\s+["'']([\w\-_]+)["''](?:\s+at\s+["''](.+?)["''])?\s*%\]',
     "\[(\[)(.+?)\]\]"
 ];
@@ -169,7 +169,8 @@ declare function tmpl:tokenize($input as xs:string) {
                     case "include" return
                         <include target="{$token/fn:group[2] => normalize-space()}"/>
                     case "template" return
-                        <template name="{$token/fn:group[2] => normalize-space()}"/>
+                        <template name="{$token/fn:group[2] => normalize-space()}" 
+                            order="{$token/fn:group[3] => normalize-space()}"/>
                     case "template!" return
                         <template name="{$token/fn:group[2] => normalize-space()}" overwrite="true"/>
                     case "endtemplate" return
@@ -650,7 +651,12 @@ declare %private function tmpl:expand-blocks($ast as node()*, $blocks as element
                                     $blocks[@overwrite='true']
                                 else
                                     $blocks
-                            for $block in reverse($selectedBlocks)
+                            let $orderedBlocks := 
+                                for $block in $selectedBlocks[@order != '']
+                                order by xs:integer($block/@order) ascending empty greatest
+                                return 
+                                    $block
+                            for $block in ($orderedBlocks, reverse($selectedBlocks[@order = '' or not(@order)]))
                             return
                                 if ($block/@unwrap) then
                                     <content unwrap="true">{ $block/node() }</content>

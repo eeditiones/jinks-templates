@@ -61,7 +61,8 @@ Supported template expressions are:
 | `[% for $var in expr %] … [% endfor %]` | Loop `$var` over sequence returned by `expr` |
 | `[% include expr %]` | Include a partial. `expr` should resolve to relative path. |
 | `[% block name %] … [% endblock %]` | Defines a named block, optionally containing default content to be displayed if there's no `template` addressing this block.|
-| `[% template name %] … [% endtemplate %]` | Contains content to be appended to the block with the same name. |
+| `[% template name order? %] … [% endtemplate %]` | Contains content to be appended to the block with the same name. The optional `order` parameter is an integer by which blocks will be sorted |
+| `[% template! name %] … [% endtemplate %]` | Replace content of a block. This overwrites all other templates targeting the same block. |
 | `[% import "uri" as "prefix" at "path" %]` | Import an XQuery module so its functions/variables can be used in template expressions. |
 | `[% raw %]…[% endraw %]` | Include the contained text as is, without parsing for templating expressions |
 | `[# … #]` | Single or multi-line comment: content will be discarded |
@@ -383,7 +384,7 @@ The final rendered output combines all templates:
 ### Key Concepts
 
 - **`[% block name %]`** - Defines a named block that can be overridden
-- **`[% template name %]`** - Provides content for a specific block
+- **`[% template name order? %]`** - Provides content for a specific block
 - **`[% include "path" %]`** - Includes another template file
 - **`"use": ["path"]`** - Imports additional template files for block definitions
 - **Frontmatter** - Configures inheritance and other templating options
@@ -391,6 +392,12 @@ The final rendered output combines all templates:
 ### Overwriting Blocks
 
 If there is more than one `[% template %]` with the same name, the content of all of them will be concatenated into the corresponding `[% block %]` placeholder. However, sometimes you may want to override content provided by earlier templates in the inheritance chain. To do so, use the special `[% template! name %]` directive.
+
+### Determining the Position of Templates in a Block
+
+By default, multiple templates will be appended to the target block in the sequence they appear in the inheritance hierarchy. To move a template's 
+content to a specific position, use the optional `order` parameter to `[% template %]`. This should be an integer, which will be used to sort the
+templates before insertion. Templates with an `order` parameter will be output *before* templates without one. The latter are still rendered in the sequence they appear in.
 
 ### The `"use"` Directive
 
