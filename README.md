@@ -1,39 +1,39 @@
 # Jinks Templates
 
-A modern templating engine for eXist-db that brings the full power of XPath and XQuery to template processing. Built for flexibility and performance, Jinks Templates handles HTML, XML, CSS, XQuery, and plain text files with a unified syntax.
+A modern templating engine for eXist-db that brings the full power of XPath and XQuery to template processing. Built for flexibility and performance, Jinks Templates handles HTML, XML, CSS, XPath, XQuery, and plain text files with a unified syntax.
 
 ## Overview
 
 Jinks Templates was developed as the core templating engine for _[Jinks](https://github.com/eeditiones/jinks)_, the new app generator for _[TEI Publisher](https://teipublisher.org)_. It extends beyond eXist's older HTML templating capabilities to provide a comprehensive solution for any templating task in the eXist ecosystem.
 
-## Key Features
+## Key features
 
-**🎯 Universal Processing** - Handle any file type with a single templating engine
+**🎯 Universal processing** - Handle any file type with a single templating engine
 
-**⚡ Native XPath/XQuery** - Use familiar XPath expressions directly in templates
+**⚡ Native XPath & XQuery** - Use familiar XPath expressions directly in templates
 
-**🏗️ Robust Architecture** - AST-based parsing and compilation for better performance
+**🏗️ Robust architecture** - AST-based parsing and compilation for better performance
 
-**📝 Frontmatter Support** - Extend template context with embedded configuration
+**📝 Front matter support** - Extend template context with embedded configuration
 
-**🔗 Template Inheritance** - Create a hierarchy of templates with block-based inheritance
+**🔗 Template inheritance** - Create a hierarchy of templates with block-based inheritance
 
-**🔧 Developer Experience** - Familiar syntax inspired by Nunjucks and JSX
+**🔧 Developer experience** - Familiar syntax inspired by Nunjucks and JSX
 
 ## Architecture
 
 Jinks Templates employs a sophisticated two-stage processing pipeline:
 
-1. **Parser** - Converts templates into an XML-based Abstract Syntax Tree
+1. **Parser** - Converts templates into an XML-based Abstract Syntax Tree (AST)
 2. **Compiler** - Transforms the AST into optimized XQuery code
 
 This architecture delivers superior performance, comprehensive error handling, and enhanced debugging capabilities compared to traditional regex-based solutions.
 
 ## Expressions
 
-The template syntax is similar to [nunjucks](https://mozilla.github.io/nunjucks/) or [jinja](https://jinja.palletsprojects.com/en/3.1.x/templates/), but uses the host language for all expressions, therefore giving users the full power of XPath/XQuery.
+The template syntax is similar to [Nunjucks](https://mozilla.github.io/nunjucks/) or [Jinja](https://jinja.palletsprojects.com/en/stable/templates/), but it uses eXist-db's host language, XQuery, for all expressions, giving users the full power of XPath & XQuery.
 
-The templating is passed a context map, which should contain all the information necessary for processing the template expressions. The entire context map can be accessed via variable `$context`. Additionally, each top-level property in the context map is made available as an XQuery variable. So if you have a context map like
+The templating is passed a context map, which should contain all the information necessary for processing the template expressions. The entire context map can be accessed via variable `$context`. Additionally, each top-level property in the context map is made available as an XQuery variable. So if you have a context map like:
 
 ```xquery
 map {
@@ -46,9 +46,9 @@ map {
 }
 ```
 
-you can either use a value expression `[[ $context?title ]]` or the shorter form `[[ $title ]]` to output the title. And to insert the content font, use `[[ $context?theme?fonts?content ]]` or `[[ $theme?fonts?content ]]`.
+You can either use a map lookup expression referencing entries in the `$content` variable `[[ $context?title ]]` or a convenient short form `[[ $title ]]` to output the title. And to insert the content font, use `[[ $context?theme?fonts?content ]]` or `[[ $theme?fonts?content ]]`.
 
-**Note**: trying to access an undefined context property via the short form, e.g. `[[ $author ]]`, will result in an error. So in case you are unsure if a property is defined, use the long form, i.e. `[[ $context?author ]]`.
+**Note**: Trying to access an undefined context property via the short form, e.g., `[[ $author ]]`, will result in an error. So in case you are unsure if a property is defined, use the long form, i.e., `[[ $context?author ]]`.
 
 Supported template expressions are:
 
@@ -67,21 +67,21 @@ Supported template expressions are:
 | `[% raw %]…[% endraw %]` | Include the contained text as is, without parsing for templating expressions |
 | `[# … #]` | Single or multi-line comment: content will be discarded |
 
-`expr` must be a valid XPath expression.
+Here, `expr` must be a valid XPath expression.
 
-For some real pages built with jinks-templates, check the app manager of TEI Publisher, [jinks](https://github.com/eeditiones/jinks/tree/main/pages). This app also includes a playground and demo for jinks-templates.
+For some real pages built with Jinks Templates, check the app manager of TEI Publisher, [jinks](https://github.com/eeditiones/jinks/tree/main/pages). This app also includes a playground and demo for jinks-templates.
 
-## Output Modes
+## Output modes
 
-The library supports two modes: **XML/HTML** and **plain text**. They differ in the XQuery code templates are compiled into. While the first will always return XML – and fails if the result is not well-formed, the second uses XQuery string templates.
+The Jinks Templates library supports two output modes: **XML/HTML** and **plain text**. They differ in the XQuery code that templates are compiled into. While the first will always return XML – and fails if the result is not well-formed, the second uses XQuery string templates.
 
 ## Use in XQuery
 
-The library exposes one main function, `tmpl:process`, which takes 3 arguments:
+The Jinks Templates library exposes one main function, `tmpl:process`, which takes 3 arguments:
 
-1. `xs:string`: the template to process as a string
-2. `map(*)`: the context providing the information to be passed to templating expressions
-3. `map(*)`: a configuration map with the following properties:
+1. `$input` (`xs:string`): the template to process as a string
+2. `$context` (`map(*)`): the context providing the information to be passed to templating expressions
+3. `$config` (`map(*)`): a configuration map with the following properties:
    1. `plainText` (`xs:boolean?`): should be true for plain text processing (default is false)
    2. `resolver` (`function(xs:string)?`): the resolver function to use (see below)
    3. `modules` (`map(*)?`): sequence of modules to import (see below)
@@ -108,16 +108,16 @@ return
     tmpl:process($input, $context, map { "plainText": false() })
 ```
 
-The input is constructed as XML, but serialized into a string for the call to `tmpl:process`. The context map contains a single property, which will become available as variable `$title` within template expressions.
+The input is constructed as XML, but serialized into a string for the call to `tmpl:process`. The context map in this example contains a single property, which will become available as variable `$title` (corresponding to its entry's name) within template expressions.
 
 ### Specifying a resolver
 
-The `resolver` function is needed if you would like to use `[% include %]`, `[% extends %]` or `[% import %]` in your templates. It should point to a function with one parameter: the relative path to the resource, and should return a map with two fields:
+Defining a `resolver` function in the configuration map is needed if you would like to use the `[% include %]`, `[% extends %]` or `[% import %]` template expressions in your templates. Its value should be a function item that takes one parameter - the relative path to the resource - and that returns a map with two entries:
 
 * `path`: the absolute path to the resource
 * `content`: the content of the resource as a string
 
-If the resource cannot be resolved, the empty sequence should be returned. In the following example we're prepending the assumed application root (`$config:app-root`) to get an absolute path and load the resource:
+If the resource cannot be resolved, the empty sequence should be returned. In the following example, we're prepending the assumed application root (`$config:app-root`) to the supplied relative path to get an absolute path and load the resource:
 
 ```xquery
 import module namespace tmpl="http://e-editiones.org/xquery/templates";
@@ -144,8 +144,8 @@ declare function local:resolver($relPath as xs:string) as map(*)? {
 
 let $input :=
     <body>
-        <h1>[[$title]]</h1>
-        <p>You are running eXist [[system:get-version()]]</p>
+        <h1>[[ $title ]]</h1>
+        <p>You are running eXist [[ system:get-version() ]]</p>
     </body>
     => serialize()
 let $context := map {
@@ -160,7 +160,7 @@ return
 
 ### Importing XQuery modules
 
-To make the variables and functions of specific XQuery modules available in your templates, you have to explicitely list those in the configuration using property `modules`. This is a map in which the key of each entry corresponds to the URI of the module and the value is a map with two properties: `prefix` and `at`, specifying the prefix to use and the location from which the module can be loaded:
+To make the variables and functions of specific XQuery modules available in your templates, you have to explicitly list those in the configuration's `modules` entry. This is a map in which the key of each entry corresponds to the URI of the module and the value is a map with two properties: `prefix` and `at`, specifying the prefix to use and the location from which the module can be loaded:
 
 ```xquery
 let $config := map {
@@ -172,99 +172,102 @@ let $config := map {
         }
     },
     "namespaces": map {
-      "tei": "http://www.tei-c.org/ns/1.0"
+        "tei": "http://www.tei-c.org/ns/1.0"
     }
 }
 return
     tmpl:process($input, $context, $config)
 ```
 
-As shown above you can also declare namespaces via the configuration in a simple object using the desired prefix as key and the namespace URI as value.
+This example also shows how namespaces can be declared in the `namespaces` entry, using the prefix as key and the namespace URI as value.
 
-## Use frontmatter to extend the context
+## Use front matter to extend the context
 
-Templates may start with a frontmatter block enclosed in `---`. The purpose of the frontmatter is to extend or overwrite the static context map provided in the second argument to `tmpl:process`. Currently only JSON syntax is supported. The frontmatter block will be parsed into an JSON object and merged with the static context passed to `tmpl:process`. For example, take the following template:
+Templates may start with a front matter block enclosed in `---`. The purpose of front matter is to extend or overwrite the static context map provided in the second argument to `tmpl:process`. Currently only JSON syntax is supported. The front matter block will be parsed into an JSON object and merged with the static context passed to `tmpl:process`. For example, take the following template:
 
 ```html
 ---json
 {
-  "title": "Lorem ipsum dolor sit amet",
-  "author": "Hans"
+    "title": "Lorem ipsum dolor sit amet",
+    "author": "Hans"
 }
 ---
 <article>
-<h1>[[ $title ]]</h1>
+    <h1>[[ $title ]]</h1>
 
-<p>Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+    <p>Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
 
-<footer>Published [[format-date(current-dateTime(), "[MNn] [D], [Y]", "en", (), ())]] by [[$author]].</footer>
+    <footer>Published [[ format-date(current-dateTime(), "[MNn] [D], [Y]", "en", (), ()) ]] by [[ $author ]].</footer>
 </article>
 ```
 
-This will overwrite the `title` and `author` properties of the static context map. The frontmatter block should come first in the file with a newline after each of the two separators. However, to allow for well-formed XML, the frontmatter may come *after* one or more surrounding elements, e.g.:
+This will overwrite the `title` and `author` properties of the static context map. 
+
+The front matter block should come first in the file with a newline after each of the two separators. However, to allow for well-formed XML, the front matter may come *after* one or more surrounding elements, e.g.:
 
 ```html
 <article>
 ---json
 {
-  "title": "Lorem ipsum dolor sit amet",
-  "author": "Hans"
+    "title": "Lorem ipsum dolor sit amet",
+    "author": "Hans"
 }
 ---
-<h1>[[ $title ]]</h1>
+    <h1>[[ $title ]]</h1>
 </article>
 ```
 
-## Configuring the templating in frontmatter
+## Configuring templating parameters in front matter
 
-Some of the configuration parameters for the templating can also be set via the frontmatter instead of providing them to the `tmpl:process` XQuery function. In particular this includes `modules`, `namespaces`.
+Some of the configuration parameters for the templating can also be set via the front matter instead of providing them to the `tmpl:process` XQuery function. These include declaring XQuery `modules` and `namespaces` that you want to reference within template expressions.
 
-Additionally, you can enable template inheritance in the frontmatter using `extends` (see next section).
+Additionally, you can enable template inheritance in the front matter using `extends` (see next section).
 
-Templating configuration parameters should go below a top-level property named `templating`:
+These templating configuration parameters should go into the front matter's block in a top-level entry named `templating`:
 
 ```html
 ---json
 {
-  "templating": {
-    "extends": "pages/demo/base.html",
-    "namespaces": {
-      "tei": "http://www.tei-c.org/ns/1.0"
-    },
-    "modules": {
-      "https://tei-publisher.com/jinks/xquery/demo": {
-        "prefix": "demo",
-        "at": "modules/demo.xql"
-      }
+    "templating": {
+        "extends": "pages/demo/base.html",
+        "namespaces": {
+            "tei": "http://www.tei-c.org/ns/1.0"
+        },
+        "modules": {
+            "https://tei-publisher.com/jinks/xquery/demo": {
+                "prefix": "demo",
+                "at": "modules/demo.xql"
+            }
+        }
     }
-  }
 }
 ---
 
 <article>
-[% let $data = demo:tei() %]
-<h1>[[ $data//tei:title/text() ]]</h1>
-<p>[[ $data//tei:body/tei:p/text() ]]</p>
-[% endlet %]
+    [% let $data = demo:tei() %]
+    <h1>[[ $data//tei:title/text() ]]</h1>
+    <p>[[ $data//tei:body/tei:p/text() ]]</p>
+    [% endlet %]
 </article>
 ```
 
-## Template Inheritance
+## Template inheritance
 
 Template inheritance allows you to create a hierarchy of templates where child templates can extend and customize parent templates. This is particularly useful for creating consistent layouts across multiple pages.
 
-### How It Works
+### How it works
 
 When a template extends another template:
+
 - **Named templates** in the child fill the corresponding blocks in the parent
 - **Remaining content** is injected into the `content` block of the parent
 - **Multiple levels** of inheritance are supported
 
-### Example: Multi-level Template Hierarchy
+### Example: Multi-level template hierarchy
 
 Here's a complete example using the test application templates:
 
-#### 1. Base Layout (`pages/page.html`)
+#### 1. Base layout (`pages/page.html`)
 ```html
 <div>
     <header>
@@ -282,7 +285,7 @@ Here's a complete example using the test application templates:
 </div>
 ```
 
-#### 2. Intermediate Template (`pages/base.html`)
+#### 2. Intermediate template (`pages/base.html`)
 ```html
 <article>
     ---json
@@ -302,7 +305,7 @@ Here's a complete example using the test application templates:
 </article>
 ```
 
-#### 3. Child Template with Additional Blocks
+#### 3. Child template with additional blocks
 ```html
 ---json
 {
@@ -328,7 +331,7 @@ Here's a complete example using the test application templates:
 </div>
 ```
 
-#### 4. Footer Template (`pages/footer.html`)
+#### 4. Footer template (`pages/footer.html`)
 ```html
 <footer style="border-top: 1px solid #a0a0a0; margin-top: 1rem;">
     <p>Generated by [[$context?app]] running on [[system:get-product-name()]] v[[system:get-version()]].</p>
@@ -336,7 +339,7 @@ Here's a complete example using the test application templates:
 </footer>
 ```
 
-#### 5. Additional Blocks (`pages/blocks.html`)
+#### 5. Additional blocks (`pages/blocks.html`)
 ```html
 <template>
     [% template menu %]
@@ -381,39 +384,39 @@ The final rendered output combines all templates:
 </div>
 ```
 
-### Key Concepts
+### Key concepts
 
 - **`[% block name %]`** - Defines a named block that can be overridden
 - **`[% template name order? %]`** - Provides content for a specific block
 - **`[% include "path" %]`** - Includes another template file
 - **`"use": ["path"]`** - Imports additional template files for block definitions
-- **Frontmatter** - Configures inheritance and other templating options
+- **Front matter** - Configures inheritance and other templating options
 
-### Overwriting Blocks
+### Overwriting blocks
 
 If there is more than one `[% template %]` with the same name, the content of all of them will be concatenated into the corresponding `[% block %]` placeholder. However, sometimes you may want to override content provided by earlier templates in the inheritance chain. To do so, use the special `[% template! name %]` directive.
 
-### Determining the Position of Templates in a Block
+### Determining the position of templates in a block
 
 By default, multiple templates will be appended to the target block in the sequence they appear in the inheritance hierarchy. To move a template's 
 content to a specific position, use the optional `order` parameter to `[% template %]`. This should be an integer, which will be used to sort the
 templates before insertion. Templates with an `order` parameter will be output *before* templates without one. The latter are still rendered in the sequence they appear in.
 
-### The `"use"` Directive
+### The `use` front matter directive
 
-The `"use"` directive in frontmatter allows you to import additional files containing only template definitions, but no other content. This is particularly useful for adding features without modifying existing templates.
+The `use` front matter directive allows you to import additional files containing only template definitions, but no other content. This is particularly useful for adding features without modifying existing templates.
 
- Use it to dynamically inject content into existing blocks, without having to specify an explicit include in the target template. If blocks are configured in the main context, additional templates will be picked up by any page which has the corresponding block placeholder. It does not need to know if additional templates are available or not.
+Use this directive to dynamically inject content into existing blocks, without having to specify an explicit include in the target template. If blocks are configured in the main context, additional templates will be picked up by any page which has the corresponding block placeholder. It does not need to know if additional templates are available or not.
 
 TEI Publisher features use this to dynamically load specific views into the sidebars. For example, if the `iiif` feature is enabled, it will load a IIIF viewer into one of the sidebars.
 
-#### How `"use"` Works
+#### How `use` works
 
-When you specify `"use": ["pages/blocks.html"]` in your frontmatter:
+When you specify `"use": ["pages/blocks.html"]` in your front matter:
 
-1. **Template Loading** - The specified template file is loaded and parsed
-2. **Block Registration** - Any `[% template name %]` blocks in the imported file become available
-3. **Content Injection** - These blocks can then be used to fill corresponding `[% block name %]` placeholders in the inheritance chain
+1. **Template loading** - The specified template file is loaded and parsed
+2. **Block registration** - Any `[% template name %]` blocks in the imported file become available
+3. **Content injection** - These blocks can then be used to fill corresponding `[% block name %]` placeholders in the inheritance chain
 
 #### Example: Using `pages/blocks.html`
 
@@ -428,9 +431,9 @@ In our example, `pages/blocks.html` contains:
 
 When referenced with `"use": ["pages/blocks.html"]`, the `menu` template becomes available and gets injected into the menu block in the inheritance chain, resulting in an additional menu item.
 
-Note that we use `<template>` as the wrapper element to indicate that this file does not contain any content that should be rendered directly. This is not necessary, but it can help with clarity and organization.
+Note that we use the HTML `<template>` element to indicate that this file does not contain any content that should be rendered directly. This is not necessary, but it can help with clarity and organization.
 
-#### Multiple `"use"` Files
+#### Multiple `"use"` files
 
 You can specify multiple files in the `"use"` array:
 ```json
@@ -465,29 +468,29 @@ In the case of arrays of maps, we recommend that each map has an `id` property f
 
 When generating XQuery code from a template, do not use string constructors like
 
-```
+```xquery
 ``[my long string with `{$variable}` interpolated]``
 ```
 
-Jinks uses string constructors in the compiled template and the XQuery parser will choke on other uses within the template text.
+Jinks Templates uses string constructors in the compiled template and the XQuery parser will choke on other uses within the template text.
 
 ## Testing
 
 This project includes a integration test suite that validates the jinks-templates API functionality, as well as smoke tests for compiling and installing the application. The tests are automatically run on every push and pull request via GitHub Actions.
 
-### Test Suite
+### Test suite
 
 This project includes a Cypress test suite for the Jinks Templates API. As well as smoke test using bats.
 
-### Test Coverage
+### Test coverage
 
-To execute the end-to-end test as small test app located in `test/app/` must be installed.
+To execute the end-to-end test, a small test app located in `test/app/` must be installed. It tests:
 
-- **API Contract:** Basic endpoint accessibility and error handling (`api.cy.js`)
-- **Template Processing:** HTML, CSS, and XQuery template rendering (`templateHtml.cy.js`, `templateCss.cy.js`, `templateXquery.cy.js`)
+- **API contract:** Basic endpoint accessibility and error handling (`api.cy.js`)
+- **Template processing:** HTML, CSS, and XQuery template rendering (`templateHtml.cy.js`, `templateCss.cy.js`, `templateXquery.cy.js`)
 - **Security:** XSS, XQuery injection, path traversal, header spoofing (`api.security.cy.js`)
 
-### Running Tests Locally
+### Running tests locally
 
 1. **Prerequisites:**
    - Node.js 22.0.0 or higher
@@ -495,32 +498,32 @@ To execute the end-to-end test as small test app located in `test/app/` must be 
    - Ant (for compiling `.xar` packages)
 
 2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+    ```bash
+    npm install
+    ```
 
 3. **Deploy app**
-   - using the provided Dockerfile:
-   ```shell
-   docker build -t jinks-templates-test .
-   docker run -dit -p 8080:8080 -p 8443:8443 jinks-templates-test
-   ```
-   - compile expath packages manually. From within the root of this repository:
-   ```shell
-   ant
-   cd test/app
-   ant
-   ```
+   - Using the provided Dockerfile:
+    ```shell
+    docker build -t jinks-templates-test .
+    docker run -dit -p 8080:8080 -p 8443:8443 jinks-templates-test
+    ```
+   - Compile expath packages manually. From within the root of this repository:
+    ```shell
+    ant
+    cd test/app
+    ant
+    ```
    Then proceed to install both `.xar` packages into your local exist-db responding on ports `8080` and `8443`
 
 4. **Run tests:**
-   ```sh
-   npx cypress open
-   # or
-   npx cypress run
-   ```
+    ```sh
+    npx cypress open
+    # or
+    npx cypress run
+    ```
 
-### GitHub Actions Workflow
+### GitHub Actions workflow
 
 The project includes a GitHub Actions workflow (`.github/workflows/test.yml`) that automatically:
 
@@ -531,10 +534,11 @@ The project includes a GitHub Actions workflow (`.github/workflows/test.yml`) th
 5. **Cleans up** containers and images
 
 The workflow runs on:
+
 - Every push
 - Every pull request to `main` or `master` branches
 
-## Release Procedure
+## Release procedure
 
 This project uses [semantic-release](https://semantic-release.gitbook.io/) to automate versioning and publishing of releases on GitHub. The process is fully automated and based on commit messages following the [Conventional Commits](https://www.conventionalcommits.org/) specification.
 
@@ -543,7 +547,7 @@ This project uses [semantic-release](https://semantic-release.gitbook.io/) to au
 - **master**: Stable releases are published from this branch.
 - **beta**: Pre-releases (e.g., `1.0.0-beta.1`) are published from this branch.
 
-### How Releases Are Triggered
+### How releases are triggered
 
 - Every push or pull request to `master` or `beta` triggers the test workflow.
 - When the test workflow completes successfully, the release workflow runs.
@@ -556,21 +560,20 @@ This project uses [semantic-release](https://semantic-release.gitbook.io/) to au
 
 - Commits pushed to the `beta` branch will create pre-releases (e.g., `1.0.0-beta.1`).
 
-
-### Local Dry Run of Semantic Release
+### Local dry run of semantic release
 
 To simulate a release locally without publishing:
 
 1. Obtain a GitHub token with `repo` permissions.
 2. Run the following command in your project root (replace `your_token_here`):
 
-   ```sh
-   GH_TOKEN=your_token_here npx semantic-release --dry-run
-   ```
+    ```sh
+    GH_TOKEN=your_token_here npx semantic-release --dry-run
+    ```
 
-This will show what semantic-release would do, without making any changes or publishing a release.
+This previews what semantic-release will do, without making any changes or publishing a release.
 
-### Release Artifacts
+### Release artifacts
 
 - The build process creates a `.xar` package in the `build/` directory.
 - This package is attached to each GitHub release automatically.
