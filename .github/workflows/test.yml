@@ -15,7 +15,7 @@ jobs:
         exist-version: [6.2.0, release]
     steps:
     - name: Checkout code
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       
     - name: Build Docker image
       run: docker build --build-arg EXIST_VERSION=${{ matrix.exist-version}} -t jinks-templates-test .
