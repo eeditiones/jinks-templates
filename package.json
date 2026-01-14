@@ -24,7 +24,7 @@
     "@semantic-release/exec": "^7.1.0",
     "@semantic-release/git": "^10.0.1",
     "chai-html": "^3.2.0",
-    "cypress": "^15.8.2",
+    "cypress": "^15.9.0",
     "semantic-release": "^25.0.2"
   }
 }
