@@ -40,7 +40,7 @@ jobs:
             break
           fi
           echo "⏳ Waiting for eXist-db... ($counter/$timeout seconds)"
-          sleep 5
+          sleep 7
           counter=$((counter + 5))
         done
   
