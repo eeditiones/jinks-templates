@@ -40,12 +40,12 @@ jobs:
             break
           fi
           echo "⏳ Waiting for eXist-db... ($counter/$timeout seconds)"
-          sleep 5
+          sleep 7
           counter=$((counter + 5))
         done
   
     - name: Run Cypress e2e test
-      uses: cypress-io/github-action@v6
+      uses: cypress-io/github-action@v7
         
     - name: Cleanup containers
       if: always()
