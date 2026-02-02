@@ -74,7 +74,7 @@ jobs:
           echo "Waiting for server to start..."
           until docker logs exist 2>&1 | grep -q "Server has started"; do
             echo "Still waiting..."
-            sleep 4
+            sleep 8
           done
 
       # Test
