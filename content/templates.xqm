@@ -594,12 +594,11 @@ declare function tmpl:to-ast($template as xs:string, $params as map(*), $config 
         $context,
         if (map:contains($context, $tmpl:CONFIG_PROPERTY)) then
             map {
-                "templating": map:remove($context?($tmpl:CONFIG_PROPERTY), $tmpl:CONFIG_EXTENDS)
-                    => map:remove($tmpl:CONFIG_USE)
+                "templating": map:remove(map:remove($context?($tmpl:CONFIG_PROPERTY), $tmpl:CONFIG_EXTENDS), $tmpl:CONFIG_USE)
             }
         else
             ()
-    ))
+    ), map { "duplicates": "use-last" })
     let $ast := tmpl:tokenize($template) => tmpl:parse($config?resolver)
     let $ast := tmpl:expand-blocks($ast, $incomingBlocks)
     return
@@ -746,14 +745,14 @@ declare function tmpl:process($template as xs:string, $params as map(*), $config
         else
             (),
         tmpl:imported-modules($ast?ast, $config?resolver)
-    ))
+    ), map { "duplicates": "use-last" })
     let $namespaces := map:merge((
         $config?namespaces,
         if (exists($ast?context?($tmpl:CONFIG_PROPERTY))) then
             $ast?context?($tmpl:CONFIG_PROPERTY)?namespaces
         else
             ()
-    ))
+    ), map { "duplicates": "use-last" })
     let $mode := if ($config?plainText) then $tmpl:TEXT_MODE else $tmpl:XML_MODE
     let $code := tmpl:generate($mode, $ast?ast, $ast?context, $modules, $namespaces, $config?resolver, $ast?blocks)
     let $result := tmpl:eval($code, $ast?ast, $ast?context, $config?resolver, $modules, $namespaces)
@@ -783,7 +782,7 @@ declare %private function tmpl:distinct-values($values) {
         case map(*)+ return
             if (every $value in $values satisfies map:contains($value, "id")) then
                 let $uniqueIds := distinct-values($values ! map:get(.,"id"))
-                let $byId := map:merge(for $value in $values return map:entry(map:get($value, "id"), $value))
+                let $byId := map:merge(for $value in $values return map:entry(map:get($value, "id"), $value), map { "duplicates": "use-last" })
                 for $id in $uniqueIds
                 return
                     $byId($id)
@@ -835,8 +834,8 @@ declare %private function tmpl:merge-deep($maps as map(*)*, $overwriteKeys as xs
                     (: Atomic values: use the value from the last map :)
                     $mapsWithKey[last()]($key)
             return
-                map:entry($key, $newVal)
-        )
+                map:entry($key, $newVal),
+        map { "duplicates": "use-last" })
 };
 
 declare function tmpl:include-static($path as xs:string, $resolver as function(*)?) {
