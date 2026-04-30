@@ -25,4 +25,22 @@ describe('XQuery mode should', () => {
         expect(normalizeWhitespace(response.body.result)).to.eq(normalizeWhitespace(expected))
       })
     })
+
+    it('allow string constructors inside template code', () => {
+      const expected = 'let $a := "a"\nreturn\n    ``[ `{$a}`b ]``'
+      cy.request({
+        method: 'POST',
+        url: '/',
+        body: {
+          template: 'let $a := "a"\nreturn\n    ``[ `{$a}`b ]``',
+          params: {},
+          mode: 'xquery'
+        },
+        failOnStatusCode: false
+      }).then(response => {
+        expect(response.status).to.eq(200)
+        expect(response.body).to.have.property('result')
+        expect(normalizeWhitespace(response.body.result)).to.eq(normalizeWhitespace(expected))
+      })
+    })
   })
