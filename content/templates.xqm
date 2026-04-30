@@ -95,7 +95,24 @@ declare variable $tmpl:TEXT_MODE := map {
         "end": function($node as node()?) { "}`" }
     },
     "text": function($text as xs:string) {
-        $text
+        (: Escape string-constructor markers by emitting them via enclosed expressions. :)
+        let $analyzed := analyze-string($text, '``\[|\]``|`\{|\}`')
+        return
+            string-join(
+                for $part in $analyzed/*
+                return
+                    typeswitch($part)
+                        case element(fn:match) return
+                            switch($part/string())
+                                case '``[' return '`{ "``[" }`'
+                                case ']``' return '`{ "]``" }`'
+                                case '`{' return '`{ "`{" }`'
+                                case '}`' return '`{ "}`" }`'
+                                default return
+                                    $part/string()
+                        default return
+                            $part/string()
+            )
     }
 };
 
