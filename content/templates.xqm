@@ -104,6 +104,7 @@ declare variable $tmpl:TEXT_MODE := map {
  :)
 declare variable $tmpl:TOKEN_REGEX := [
     "\[%\s*(raw)\s*%\](.*?)\[%\s*(endraw)\s*%\]",
+    "\[(#)(.*?)#\]",
     "\[%\s*(end\w+)\s*%\]",
     "\[%\s*(for)\s+(\$\w+)\s+in\s+(.+?)%\]",
     "\[%\s*(let)\s+(\$\w+)\s+=\s+(.+?)%\]",
@@ -143,8 +144,6 @@ declare function tmpl:frontmatter($input as xs:string) {
  :)
 declare function tmpl:tokenize($input as xs:string) {
     let $regex := "(?:" || string-join($tmpl:TOKEN_REGEX, "|") || ")"
-    (: First remove comments :)
-    let $input := replace($input, "\[(#)(.*?)#\]", "", "is")
     (: Remove front matter :)
     let $input := replace($input, "^(\s*<.+?>)?\s*---(?:json|)\s*\n.*?\n\s*---(.*)$", "$1$2", "is")
     let $analyzed := analyze-string($input, $regex, "is")
@@ -192,6 +191,8 @@ declare function tmpl:tokenize($input as xs:string) {
                                 <block name="{$token/fn:group[2] => normalize-space()}"/>
                             case "endblock" return
                                 <endblock/>
+                            case "#" return
+                                ()
                             case "raw" return
                                 <raw>{ $token/fn:group[2] => normalize-space() }</raw>
                             case "import" return

@@ -256,6 +256,24 @@ describe('Template Content in HTML mode should', () => {
       })
     })
 
+    it('Process: comment syntax inside raw block is preserved', () => {
+      const expected = '<td><code>[# #]</code></td>'
+      cy.request({
+        method: 'POST',
+        url: '/',
+        body: {
+          template: '<td><code>[% raw %][# #][% endraw %]</code></td>',
+          params: {},
+          mode: 'html'
+        },
+        failOnStatusCode: false
+      }).then(response => {
+        expect(response.status).to.eq(200)
+        expect(response.body).to.have.property('result')
+        expect(response.body.result).html.to.equal(expected)
+      })
+    })
+
     it('Process: conditional attribute expression emits attribute', () => {
       const expected = '<div><a id="cta" class="btn-primary">Read more</a></div>'
       cy.request({
