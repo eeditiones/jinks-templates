@@ -73,6 +73,24 @@ describe('Template Content in HTML mode should', () => {
       })
     })
 
+    it('Process: multiple ifs inside let', () => {
+      const expected = '<div><p>first</p><p>always</p><p>last</p></div>'
+      cy.request({
+        method: 'POST',
+        url: '/',
+        body: {
+          template: '<div>[% let $a = "123" %][% if true() %]<p>first</p>[% endif %]<p>always</p>[% if true() %]<p>last</p>[% endif %][% endlet %]</div>',
+          params: {},
+          mode: 'html'
+        },
+        failOnStatusCode: false
+      }).then(response => {
+        expect(response.status).to.eq(200)
+        expect(response.body).to.have.property('result')
+        expect(response.body.result).html.to.equal(expected)
+      })
+    })
+
     it('Process: nested for with if/else', () => {
       const expected = '<ul><li>1: odd</li><li>2: even</li><li>3: odd</li><li>4: even</li><li>5: odd</li></ul>'
       cy.request({
