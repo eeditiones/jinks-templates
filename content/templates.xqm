@@ -36,7 +36,8 @@ declare variable $tmpl:XML_MODE := map {
                     not(
                         $firstChild instance of element(else) or
                         $firstChild instance of element(elif)
-                    )
+                    ) and
+                    not($node/node()[not(matches(., "^[\s\n]+$"))][2])
                 ) then
                     ()
                 else
@@ -50,7 +51,8 @@ declare variable $tmpl:XML_MODE := map {
                     not(
                         $firstChild instance of element(else) or
                         $firstChild instance of element(elif)
-                    )
+                    ) and
+                    not($node/node()[not(matches(., "^[\s\n]+$"))][2])
                 ) then
                     ()
                 else
@@ -60,16 +62,18 @@ declare variable $tmpl:XML_MODE := map {
     "enclose": map {
         "start": function($node as node()?) {
             let $preceding := $node/preceding-sibling::node()[not(matches(., "^[\s\n]+$"))][1]
+            let $following := $node/following-sibling::node()[not(matches(., "^[\s\n]+$"))][1]
             return
-                if (empty($preceding) and $node/parent::*[not(self::ast)]) then
+                if (empty($preceding) and empty($following) and $node/parent::*[not(self::ast)]) then
                     ()
                 else
                     "{"
         },
         "end": function($node as node()?) {
             let $preceding := $node/preceding-sibling::node()[not(matches(., "^[\s\n]+$"))][1]
+            let $following := $node/following-sibling::node()[not(matches(., "^[\s\n]+$"))][1]
             return
-                if (empty($preceding) and $node/parent::*[not(self::ast)]) then
+                if (empty($preceding) and empty($following) and $node/parent::*[not(self::ast)]) then
                     ()
                 else
                     "}"
@@ -91,7 +95,24 @@ declare variable $tmpl:TEXT_MODE := map {
         "end": function($node as node()?) { "}`" }
     },
     "text": function($text as xs:string) {
-        $text
+        (: Escape string-constructor markers by emitting them via enclosed expressions. :)
+        let $analyzed := analyze-string($text, '``\[|\]``|`\{|\}`')
+        return
+            string-join(
+                for $part in $analyzed/*
+                return
+                    typeswitch($part)
+                        case element(fn:match) return
+                            switch($part/string())
+                                case '``[' return '`{ "``[" }`'
+                                case ']``' return '`{ "]``" }`'
+                                case '`{' return '`{ "`{" }`'
+                                case '}`' return '`{ "}`" }`'
+                                default return
+                                    $part/string()
+                        default return
+                            $part/string()
+            )
     }
 };
 
@@ -100,6 +121,7 @@ declare variable $tmpl:TEXT_MODE := map {
  :)
 declare variable $tmpl:TOKEN_REGEX := [
     "\[%\s*(raw)\s*%\](.*?)\[%\s*(endraw)\s*%\]",
+    "\[(#)(.*?)#\]",
     "\[%\s*(end\w+)\s*%\]",
     "\[%\s*(for)\s+(\$\w+)\s+in\s+(.+?)%\]",
     "\[%\s*(let)\s+(\$\w+)\s+=\s+(.+?)%\]",
@@ -139,8 +161,6 @@ declare function tmpl:frontmatter($input as xs:string) {
  :)
 declare function tmpl:tokenize($input as xs:string) {
     let $regex := "(?:" || string-join($tmpl:TOKEN_REGEX, "|") || ")"
-    (: First remove comments :)
-    let $input := replace($input, "\[(#)(.*?)#\]", "", "is")
     (: Remove front matter :)
     let $input := replace($input, "^(\s*<.+?>)?\s*---(?:json|)\s*\n.*?\n\s*---(.*)$", "$1$2", "is")
     let $analyzed := analyze-string($input, $regex, "is")
@@ -178,7 +198,7 @@ declare function tmpl:tokenize($input as xs:string) {
                             case "include" return
                                 <include target="{$token/fn:group[2] => normalize-space()}"/>
                             case "template" return
-                                <template name="{$token/fn:group[2] => normalize-space()}" 
+                                <template name="{$token/fn:group[2] => normalize-space()}"
                                     order="{$token/fn:group[3] => normalize-space()}"/>
                             case "template!" return
                                 <template name="{$token/fn:group[2] => normalize-space()}" overwrite="true"/>
@@ -188,6 +208,8 @@ declare function tmpl:tokenize($input as xs:string) {
                                 <block name="{$token/fn:group[2] => normalize-space()}"/>
                             case "endblock" return
                                 <endblock/>
+                            case "#" return
+                                ()
                             case "raw" return
                                 <raw>{ $token/fn:group[2] => normalize-space() }</raw>
                             case "import" return
@@ -720,10 +742,10 @@ declare %private function tmpl:expand-blocks($ast as node()*, $blocks as element
                                     $blocks[@overwrite='true']
                                 else
                                     $blocks
-                            let $orderedBlocks := 
+                            let $orderedBlocks :=
                                 for $block in $selectedBlocks[@order != '']
                                 order by xs:integer($block/@order) ascending empty greatest
-                                return 
+                                return
                                     $block
                             for $block in ($orderedBlocks, reverse($selectedBlocks[@order = '' or not(@order)]))
                             return
