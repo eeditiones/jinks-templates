@@ -110,6 +110,7 @@ declare variable $tmpl:TOKEN_REGEX := [
     "\[%\s*(block)\s+(.+?)%\]",
     "\[%\s*(template!?)\s+(\S+?)(?:\s+(.*?))?%\]",
     '\[%\s*(import)\s+["''](.+?)["'']\s+as\s+["'']([\w\-_]+)["''](?:\s+at\s+["''](.+?)["''])?\s*%\]',
+    '(([\w:.-]+)\s*=\s*"(!)\[\[(.+?)\]\]")',
     "\[(\[)(.+?)\]\]"
 ];
 
@@ -148,52 +149,60 @@ declare function tmpl:tokenize($input as xs:string) {
         typeswitch($token)
             case element(fn:match) return
                 let $type := $token/fn:group[1]
+                let $token-string := $token/string()
+                let $cond-attr := analyze-string($token-string, '^([\w:.-]+)\s*=\s*"(!)\[\[(.+?)\]\]"$', "s")
                 return
-                switch($type)
-                    case "endfor" return
-                        <endfor/>
-                    case "endlet" return
-                        <endlet/>
-                    case "endif" return
-                        <endif/>
-                    case "if" return
-                        <if expr="{$token/fn:group[2] => normalize-space()}"/>
-                    case "elif" return
-                        <elif expr="{$token/fn:group[2] => normalize-space()}"/>
-                    case "else" return
-                        <else/>
-                    case "for" return
-                        <for var="{$token/fn:group[2] => normalize-space()}" expr="{$token/fn:group[3] => normalize-space()}"/>
-                    case "let" return
-                        <let var="{$token/fn:group[2] => normalize-space()}" expr="{$token/fn:group[3] => normalize-space()}"/>
-                    case "include" return
-                        <include target="{$token/fn:group[2] => normalize-space()}"/>
-                    case "template" return
-                        <template name="{$token/fn:group[2] => normalize-space()}" 
-                            order="{$token/fn:group[3] => normalize-space()}"/>
-                    case "template!" return
-                        <template name="{$token/fn:group[2] => normalize-space()}" overwrite="true"/>
-                    case "endtemplate" return
-                        <endtemplate/>
-                    case "block" return
-                        <block name="{$token/fn:group[2] => normalize-space()}"/>
-                    case "endblock" return
-                        <endblock/>
-                    case "raw" return
-                        <raw>{ $token/fn:group[2] => normalize-space() }</raw>
-                    case "import" return
-                        <import uri="{$token/fn:group[2] => normalize-space()}" as="{$token/fn:group[3] => normalize-space()}">
-                        {
-                            if (count($token/fn:group) > 3) then
-                                attribute at {$token/fn:group[4] => normalize-space()}
-                            else
-                                ()
-                        }
-                        </import>
-                    case "[" return
-                        <value expr="{$token/fn:group[2] => normalize-space()}"/>
-                    default return
-                        <error>{$token}</error>
+                    if (count($cond-attr//fn:group) = 3 and $cond-attr//fn:group[@nr = 2] = "!") then
+                        <cond-attr
+                            name="{$cond-attr//fn:group[@nr = 1] => normalize-space()}"
+                            expr="{$cond-attr//fn:group[@nr = 3] => normalize-space()}"
+                        />
+                    else
+                        switch($type)
+                            case "endfor" return
+                                <endfor/>
+                            case "endlet" return
+                                <endlet/>
+                            case "endif" return
+                                <endif/>
+                            case "if" return
+                                <if expr="{$token/fn:group[2] => normalize-space()}"/>
+                            case "elif" return
+                                <elif expr="{$token/fn:group[2] => normalize-space()}"/>
+                            case "else" return
+                                <else/>
+                            case "for" return
+                                <for var="{$token/fn:group[2] => normalize-space()}" expr="{$token/fn:group[3] => normalize-space()}"/>
+                            case "let" return
+                                <let var="{$token/fn:group[2] => normalize-space()}" expr="{$token/fn:group[3] => normalize-space()}"/>
+                            case "include" return
+                                <include target="{$token/fn:group[2] => normalize-space()}"/>
+                            case "template" return
+                                <template name="{$token/fn:group[2] => normalize-space()}" 
+                                    order="{$token/fn:group[3] => normalize-space()}"/>
+                            case "template!" return
+                                <template name="{$token/fn:group[2] => normalize-space()}" overwrite="true"/>
+                            case "endtemplate" return
+                                <endtemplate/>
+                            case "block" return
+                                <block name="{$token/fn:group[2] => normalize-space()}"/>
+                            case "endblock" return
+                                <endblock/>
+                            case "raw" return
+                                <raw>{ $token/fn:group[2] => normalize-space() }</raw>
+                            case "import" return
+                                <import uri="{$token/fn:group[2] => normalize-space()}" as="{$token/fn:group[3] => normalize-space()}">
+                                {
+                                    if (count($token/fn:group) > 3) then
+                                        attribute at {$token/fn:group[4] => normalize-space()}
+                                    else
+                                        ()
+                                }
+                                </import>
+                            case "[" return
+                                <value expr="{$token/fn:group[2] => normalize-space()}"/>
+                            default return
+                                <error>{$token}</error>
             default return
                 $token/string()
 };
@@ -232,6 +241,52 @@ declare %private function tmpl:lookahead($tokens as item()*, $type as xs:string,
  :)
 declare function tmpl:parse($tokens as item()*, $resolver as function(*)?) {
     <ast>{tmpl:do-parse($tokens, $resolver)}</ast>
+};
+
+declare %private function tmpl:normalize-cond-attrs($nodes as item()*) {
+    let $normalized :=
+        for $node in $nodes
+        return
+            typeswitch($node)
+                case element(cond-attr) return
+                    $node
+                case element() return
+                    element { node-name($node) } {
+                        $node/@*,
+                        tmpl:normalize-cond-attrs($node/node())
+                    }
+                default return
+                    $node
+    return
+        tmpl:move-cond-attrs($normalized, (), ())
+};
+
+declare %private function tmpl:move-cond-attrs($nodes as item()*, $output as item()*, $pending as element(cond-attr)*) {
+    if (empty($nodes)) then
+        ($output, $pending)
+    else
+        let $next := head($nodes)
+        let $tail := tail($nodes)
+        return
+            typeswitch($next)
+                case element(cond-attr) return
+                    tmpl:move-cond-attrs($tail, $output, ($pending, $next))
+                case text() return
+                    if (exists($pending) and contains($next, ">")) then
+                        let $before := substring-before($next, ">")
+                        let $after := substring-after($next, ">")
+                        let $newOutput := (
+                            $output,
+                            text { $before || ">" },
+                            $pending,
+                            if ($after != "") then text { $after } else ()
+                        )
+                        return
+                            tmpl:move-cond-attrs($tail, $newOutput, ())
+                    else
+                        tmpl:move-cond-attrs($tail, ($output, $next), $pending)
+                default return
+                    tmpl:move-cond-attrs($tail, ($output, $next), $pending)
 };
 
 declare %private function tmpl:do-parse($tokens as item()*, $resolver as function(*)?) {
@@ -509,6 +564,20 @@ declare %private function tmpl:emit($config as map(*), $nodes as item()*) {
                         $config?enclose?start($node)
                         || "tmpl:valueOf(" || $expr || ")"
                         || $config?enclose?end($node)
+                case element(cond-attr) return
+                    let $expr :=
+                        if (matches($node/@expr, "^[^$][\w_-]+$")) then
+                            "$" || $node/@expr
+                        else
+                            $node/@expr
+                    let $attrName := $node/@name/string()
+                    return
+                        $config?enclose?start($node)
+                        || "let $value := tmpl:valueOf(" || $expr || ") return "
+                        || "if (count($value) > 1 or $value) then "
+                        || "attribute " || $attrName || " { $value }"
+                        || " else () "
+                        || $config?enclose?end($node)
                 case element(block) | element(import) return
                     ()
                 case element() return
@@ -600,6 +669,7 @@ declare function tmpl:to-ast($template as xs:string, $params as map(*), $config 
             ()
     ), map { "duplicates": "use-last" })
     let $ast := tmpl:tokenize($template) => tmpl:parse($config?resolver)
+    let $ast := <ast>{ tmpl:normalize-cond-attrs($ast/node()) }</ast>
     let $ast := tmpl:expand-blocks($ast, $incomingBlocks)
     return
         if ($extends) then

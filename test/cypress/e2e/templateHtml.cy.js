@@ -237,4 +237,40 @@ describe('Template Content in HTML mode should', () => {
         // No expected output in fixture, so just check for successful processing
       })
     })
+
+    it('Process: conditional attribute expression emits attribute', () => {
+      const expected = '<div><a id="cta" class="btn-primary">Read more</a></div>'
+      cy.request({
+        method: 'POST',
+        url: '/',
+        body: {
+          template: '<div><a class="![[ $class ]]" id="cta">Read more</a></div>',
+          params: { class: 'btn-primary' },
+          mode: 'html'
+        },
+        failOnStatusCode: false
+      }).then(response => {
+        expect(response.status).to.eq(200)
+        expect(response.body).to.have.property('result')
+        expect(response.body.result).html.to.eq(expected)
+      })
+    })
+
+    it('Process: conditional attribute expression omits empty attribute', () => {
+      const expected = '<div><a id="cta">Read more</a></div>'
+      cy.request({
+        method: 'POST',
+        url: '/',
+        body: {
+          template: '<div><a class="![[ $class ]]" id="cta">Read more</a></div>',
+          params: { class: '' },
+          mode: 'html'
+        },
+        failOnStatusCode: false
+      }).then(response => {
+        expect(response.status).to.eq(200)
+        expect(response.body).to.have.property('result')
+        expect(response.body.result).html.to.eq(expected)
+      })
+    })
 })

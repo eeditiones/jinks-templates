@@ -66,6 +66,7 @@ Supported template expressions are:
 | `[% import "uri" as "prefix" at "path" %]` | Import an XQuery module so its functions/variables can be used in template expressions. |
 | `[% raw %]…[% endraw %]` | Include the contained text as is, without parsing for templating expressions |
 | `[# … #]` | Single or multi-line comment: content will be discarded |
+| `attr="![[ expr ]]"` | Conditionally emit attribute `attr`: evaluate `expr` as boolean and output the attribute only if true |
 
 Here, `expr` must be a valid XPath expression.
 
@@ -74,6 +75,17 @@ For some real pages built with Jinks Templates, check the app manager of TEI Pub
 ## Output modes
 
 The Jinks Templates library supports two output modes: **XML/HTML** and **plain text**. They differ in the XQuery code that templates are compiled into. While the first will always return XML – and fails if the result is not well-formed, the second uses XQuery string templates.
+
+## Conditional attributes
+
+Conditional attributes are useful when templates should stay valid XML while still deciding at runtime whether an attribute should be present. Example:
+
+```xml
+<a class="![[ $expression ]]" href="/docs">Documentation</a>
+```
+
+If the effective boolean value of `$expression` is true, `class` is emitted; otherwise the `class` attribute is omitted completely. Note that the empty string, the empty sequence or the number 0 count as false.
+
 
 ## Use in XQuery
 
