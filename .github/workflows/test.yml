@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        exist-version: [6.2.0, release]
+        exist-version: [6.2.0, release, latest]
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
