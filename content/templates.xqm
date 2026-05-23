@@ -29,6 +29,7 @@ declare variable $tmpl:XML_MODE := map {
     "xml": true(),
     "block": map {
         "start": function($node as node()?) {
+            (:
             let $firstChild := $node/node()[not(matches(., "^[\s\n]+$"))][1]
             return
                 if (
@@ -40,13 +41,15 @@ declare variable $tmpl:XML_MODE := map {
                     not($node/node()[not(matches(., "^[\s\n]+$"))][2])
                 ) then
                     ()
-                else
+                else 
+            :)
                     "&lt;t&gt;"
         },
         "end": function($node as node()?) {
+            (:
             let $firstChild := $node/node()[not(matches(., "^[\s\n]+$"))][1]
             return
-                if (
+                 if (
                     $firstChild instance of element() and
                     not(
                         $firstChild instance of element(else) or
@@ -55,7 +58,8 @@ declare variable $tmpl:XML_MODE := map {
                     not($node/node()[not(matches(., "^[\s\n]+$"))][2])
                 ) then
                     ()
-                else
+                else 
+            :)
                     "&lt;/t&gt;/node()"
         }
     },
