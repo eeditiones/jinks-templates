@@ -44,7 +44,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
-          java-version: 22
+          java-version: 21
       - run: ant -Dapp.version=1.0.0
 
       # For private repos use secret org token
