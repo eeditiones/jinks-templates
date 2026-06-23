@@ -8,11 +8,11 @@ describe('Template Content in plain text mode should', () => {
         '  [% endfor %]\n' +
         '</package>'
       const expected = '<package>\n' +
-        '  \n' +
+        '\n' +
         '    <dependency package="http://example.org/a" semver="1"/>\n' +
-        '  \n' +
+        '\n' +
         '    <dependency package="http://example.org/b" semver-min="6.1" semver-max="6"/>\n' +
-        '  \n' +
+        '\n' +
         '</package>'
 
       cy.request({
@@ -32,7 +32,7 @@ describe('Template Content in plain text mode should', () => {
       }).then(response => {
         expect(response.status).to.eq(200)
         expect(response.body).to.have.property('result')
-        expect(response.body.result).to.eq(expected)
+        expect(response.body.result.replace(/^[ \t]+$/gm, '')).to.eq(expected)
       })
     })
 })

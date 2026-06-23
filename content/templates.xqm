@@ -132,7 +132,7 @@ declare variable $tmpl:TOKEN_REGEX := [
     "\[%\s*(block)\s+(.+?)%\]",
     "\[%\s*(template!?)\s+(\S+?)(?:\s+(.*?))?%\]",
     '\[%\s*(import)\s+["''](.+?)["'']\s+as\s+["'']([\w\-_]+)["''](?:\s+at\s+["''](.+?)["''])?\s*%\]',
-    '(([\w:.-]+)\s*=\s*"(!)\[\[(.+?)\]\]")',
+    '(\s*([\w:.-]+)\s*=\s*"(!)\[\[(.+?)\]\]")',
     "\[(\[)(.+?)\]\]"
 ];
 
@@ -170,7 +170,7 @@ declare function tmpl:tokenize($input as xs:string) {
             case element(fn:match) return
                 let $type := $token/fn:group[1]
                 let $token-string := $token/string()
-                let $cond-attr := analyze-string($token-string, '^([\w:.-]+)\s*=\s*"(!)\[\[(.+?)\]\]"$', "s")
+                let $cond-attr := analyze-string($token-string, '^\s*([\w:.-]+)\s*=\s*"(!)\[\[(.+?)\]\]"$', "s")
                 return
                     if (count($cond-attr//fn:group) = 3 and $cond-attr//fn:group[@nr = 2] = "!") then
                         <cond-attr
@@ -265,7 +265,7 @@ declare function tmpl:parse($tokens as item()*, $resolver as function(*)?) {
     <ast>{tmpl:do-parse($tokens, $resolver)}</ast>
 };
 
-declare %private function tmpl:normalize-cond-attrs($nodes as item()*) {
+declare %private function tmpl:normalize-cond-attrs($nodes as item()*, $xml as xs:boolean) {
     let $normalized :=
         for $node in $nodes
         return
@@ -275,15 +275,18 @@ declare %private function tmpl:normalize-cond-attrs($nodes as item()*) {
                 case element() return
                     element { node-name($node) } {
                         $node/@*,
-                        tmpl:normalize-cond-attrs($node/node())
+                        tmpl:normalize-cond-attrs($node/node(), $xml)
                     }
                 default return
                     $node
     return
-        tmpl:move-cond-attrs($normalized, (), ())
+        if ($xml) then
+            tmpl:move-cond-attrs($normalized, (), (), $xml)
+        else
+            $normalized
 };
 
-declare %private function tmpl:move-cond-attrs($nodes as item()*, $output as item()*, $pending as element(cond-attr)*) {
+declare %private function tmpl:move-cond-attrs($nodes as item()*, $output as item()*, $pending as element(cond-attr)*, $xml as xs:boolean) {
     if (empty($nodes)) then
         ($output, $pending)
     else
@@ -292,23 +295,39 @@ declare %private function tmpl:move-cond-attrs($nodes as item()*, $output as ite
         return
             typeswitch($next)
                 case element(cond-attr) return
-                    tmpl:move-cond-attrs($tail, $output, ($pending, $next))
+                    tmpl:move-cond-attrs($tail, $output, ($pending, $next), $xml)
                 case text() return
                     if (exists($pending) and contains($next, ">")) then
                         let $before := substring-before($next, ">")
                         let $after := substring-after($next, ">")
                         let $newOutput := (
                             $output,
-                            text { $before || ">" },
-                            $pending,
+                            if ($xml) then (
+                                text { $before || ">" },
+                                $pending
+                            ) else (
+                                text {
+                                    if (matches($before, "/\s*$")) then
+                                        replace($before, "\s*/\s*$", "")
+                                    else
+                                        $before
+                                },
+                                $pending,
+                                text {
+                                    if (matches($before, "/\s*$")) then
+                                        "/>"
+                                    else
+                                        ">"
+                                }
+                            ),
                             if ($after != "") then text { $after } else ()
                         )
                         return
-                            tmpl:move-cond-attrs($tail, $newOutput, ())
+                            tmpl:move-cond-attrs($tail, $newOutput, (), $xml)
                     else
-                        tmpl:move-cond-attrs($tail, ($output, $next), $pending)
+                        tmpl:move-cond-attrs($tail, ($output, $next), $pending, $xml)
                 default return
-                    tmpl:move-cond-attrs($tail, ($output, $next), $pending)
+                    tmpl:move-cond-attrs($tail, ($output, $next), $pending, $xml)
 };
 
 declare %private function tmpl:do-parse($tokens as item()*, $resolver as function(*)?) {
@@ -636,12 +655,12 @@ declare function tmpl:conditional-attribute($name as xs:string, $value as item()
 declare function tmpl:escape-attribute($value as xs:string) as xs:string {
     replace(
         replace(
-            replace($value, "&", "&amp;"),
+            replace($value, "&amp;", "&amp;amp;"),
             '"',
-            "&quot;"
+            "&amp;quot;"
         ),
         "<",
-        "&lt;"
+        "&amp;lt;"
     )
 };
 
@@ -715,7 +734,7 @@ declare function tmpl:to-ast($template as xs:string, $params as map(*), $config 
             ()
     ), map { "duplicates": "use-last" })
     let $ast := tmpl:tokenize($template) => tmpl:parse($config?resolver)
-    let $ast := <ast>{ tmpl:normalize-cond-attrs($ast/node()) }</ast>
+    let $ast := <ast>{ tmpl:normalize-cond-attrs($ast/node(), not($config?plainText)) }</ast>
     let $ast := tmpl:expand-blocks($ast, $incomingBlocks)
     return
         if ($extends) then
