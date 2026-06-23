@@ -596,9 +596,14 @@ declare %private function tmpl:emit($config as map(*), $nodes as item()*) {
                     return
                         $config?enclose?start($node)
                         || "let $value := tmpl:valueOf(" || $expr || ") return "
-                        || "if (count($value) > 1 or $value) then "
-                        || "attribute " || $attrName || " { $value }"
-                        || " else () "
+                        || (
+                            if ($config?xml) then
+                                "if (count($value) > 1 or $value) then "
+                                || "attribute " || $attrName || " { $value }"
+                                || " else () "
+                            else
+                                "tmpl:conditional-attribute('" || $attrName || "', $value)"
+                        )
                         || $config?enclose?end($node)
                 case element(block) | element(import) return
                     ()
@@ -619,6 +624,25 @@ declare function tmpl:valueOf($values as item()*) {
                 tmpl:valueOf($value?*)
             default return
                 $value
+};
+
+declare function tmpl:conditional-attribute($name as xs:string, $value as item()*) as xs:string? {
+    if (count($value) > 1 or $value) then
+        " " || $name || '="' || tmpl:escape-attribute(string-join($value ! string(.), " ")) || '"'
+    else
+        ()
+};
+
+declare function tmpl:escape-attribute($value as xs:string) as xs:string {
+    replace(
+        replace(
+            replace($value, "&", "&amp;"),
+            '"',
+            "&quot;"
+        ),
+        "<",
+        "&lt;"
+    )
 };
 
 (:~
