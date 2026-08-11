@@ -422,7 +422,16 @@ declare %private function tmpl:do-parse($tokens as item()*, $resolver as functio
                 case element(include) return (
                     (: check if we can do a static include :)
                     if (matches($next/@target, '^"[^"]*"$')) then
-                        replace($next/@target, '^"([^"]*)"$', '$1') => tmpl:include-static($resolver)
+                        (: Splice in the parsed include's children, not its <ast> root:
+                         : a nested <ast> wrapper breaks the XML-mode code generator's
+                         : context heuristics. block?start takes the single <ast> element
+                         : for the "sole element child" case and omits the <t> wrapper,
+                         : while enclose?start sees parent::ast on the included template's
+                         : root nodes and emits braces - producing an enclosed expression
+                         : outside any element constructor (XPST0003) whenever a partial
+                         : starting with a control block (if/for/let) is included inside
+                         : another block. :)
+                        (replace($next/@target, '^"([^"]*)"$', '$1') => tmpl:include-static($resolver))/node()
                     else
                         $next,
                     tmpl:do-parse(tail($tokens), $resolver)
