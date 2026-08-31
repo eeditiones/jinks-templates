@@ -145,6 +145,53 @@ describe('Template Content in HTML mode should', () => {
       })
     })
 
+    it('include a partial whose root is an if-block, inside another if', () => {
+      // Regression: the static-include splice used to insert the included
+      // template's <ast> wrapper into the surrounding tree, which broke the
+      // XML-mode generator's context heuristics whenever the partial started
+      // with a control block (if/for/let) and the include sat inside another
+      // block: XPST0003 at compile time.
+      const cases = [
+        [{show: true, cached: false}, '<header><p>inline</p></header>'],
+        [{show: true, cached: true}, '<header><p>cached</p></header>'],
+        [{show: false, cached: false}, '<header/>']
+      ]
+      cases.forEach(([params, expected]) => {
+        cy.request({
+          method: 'POST',
+          url: '/',
+          body: {
+            template: '<header>\n  [% if $show %]\n  [% include "pages/conditional.html" %]\n  [% endif %]\n</header>',
+            params,
+            mode: 'html'
+          },
+          failOnStatusCode: false
+        }).then(response => {
+          expect(response.status).to.eq(200)
+          expect(response.body).to.have.property('result')
+          expect(response.body.result).html.to.eq(expected)
+        })
+      })
+    })
+
+    it('include a partial whose root is a for-loop, inside an if', () => {
+      // Same regression, for-rooted partial.
+      cy.request({
+        method: 'POST',
+        url: '/',
+        body: {
+          template: '<ul>[% if $show %][% include "pages/items.html" %][% endif %]</ul>',
+          params: {show: true, items: ['one', 'two']},
+          mode: 'html'
+        },
+        failOnStatusCode: false
+      }).then(response => {
+        expect(response.status).to.eq(200)
+        expect(response.body).to.have.property('result')
+        expect(response.body.result).html.to.eq('<ul><li>one</li><li>two</li></ul>')
+      })
+    })
+
     it('Use imported module functions', () => {
       const expected = '<section><ul><li>Application title: My great new application</li></ul></section>'
       cy.request({
