@@ -1,4 +1,4 @@
-ARG EXIST_VERSION=6.2.0
+ARG EXIST_VERSION=6.4.1
 ARG BUILD=local
 
 FROM ghcr.io/eeditiones/builder:latest AS builder
