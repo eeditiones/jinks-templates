@@ -2,6 +2,8 @@ xquery version "3.1";
 
 module namespace tmpl="http://e-editiones.org/xquery/templates";
 
+import module namespace cache="http://exist-db.org/xquery/cache" at "java:org.exist.xquery.modules.cache.CacheModule";
+
 (:~
  : Thrown if the parser reaches the end of the input stream
  : while trying to find the end* marker for a block.
@@ -24,6 +26,22 @@ declare variable $tmpl:CONFIG_USE := "use";
 declare variable $tmpl:CONFIG_IGNORE_USE := "ignoreUse";
 declare variable $tmpl:CONFIG_TEMPLATES := "templates";
 declare variable $tmpl:CONFIG_REPLACE := "$replace";
+(:~
+ : The name of an eXist cache (cache module) in which tmpl:process keeps
+ : compiled templates. Unset, nothing is cached.
+ :)
+declare variable $tmpl:CONFIG_CACHE := "cache";
+
+(:~ The most compiled templates a cache created by tmpl:process holds. An app can create the cache itself to set its own limits. :)
+declare variable $tmpl:CACHE_MAX_SIZE := 500;
+
+(:~ This library's version, from its package descriptor; part of each cached template's key, so an upgrade compiles templates anew. :)
+declare variable $tmpl:VERSION :=
+    try {
+        parse-xml(util:binary-to-string(repo:get-resource("http://tei-publisher.com/library/jinks-templates", "expath-pkg.xml")))/*/@version/string()
+    } catch * {
+        ""
+    };
 
 declare variable $tmpl:XML_MODE := map {
     "xml": true(),
@@ -713,6 +731,39 @@ declare function tmpl:eval($code as xs:string, $ast as element(), $context as ma
 };
 
 (:~
+ : The context an extended template receives: "extends" and "use" are removed
+ : from the templating params to avoid infinite recursion.
+ :)
+declare %private function tmpl:child-context($context as map(*)) as map(*) {
+    map:merge((
+        $context,
+        if (map:contains($context, $tmpl:CONFIG_PROPERTY)) then
+            map {
+                "templating": map:remove(map:remove($context?($tmpl:CONFIG_PROPERTY), $tmpl:CONFIG_EXTENDS), $tmpl:CONFIG_USE)
+            }
+        else
+            ()
+    ), map { "duplicates": "use-last" })
+};
+
+(:~
+ : The context tmpl:to-ast computes for $template, without parsing it: the
+ : params merged with the frontmatter of the template and of each template it
+ : extends, in the same order. A compiled template taken from the cache still
+ : needs it, since it holds this call's params.
+ :)
+declare %private function tmpl:context($template as xs:string, $params as map(*), $config as map(*)) as map(*) {
+    let $localContext := tmpl:frontmatter($template)
+    let $extends := tmpl:templating-param($localContext, $tmpl:CONFIG_EXTENDS)
+    let $modContext := tmpl:child-context(tmpl:merge-deep(($params, $localContext)))
+    return
+        if ($extends) then
+            tmpl:context($config?resolver($extends)?content, $modContext, $config)
+        else
+            $modContext
+};
+
+(:~
  : Parses a template into an abstract syntax tree (AST), recursively merging extended templates and blocks.
  :)
 declare function tmpl:to-ast($template as xs:string, $params as map(*), $config as map(*), $blocks as element(template)*) {
@@ -723,16 +774,7 @@ declare function tmpl:to-ast($template as xs:string, $params as map(*), $config 
         $blocks,
         tmpl:external-blocks($config, $context, $config?resolver)
     )
-    (: Remove "extends" from templating params to avoid infinite recursion :)
-    let $modContext := map:merge((
-        $context,
-        if (map:contains($context, $tmpl:CONFIG_PROPERTY)) then
-            map {
-                "templating": map:remove(map:remove($context?($tmpl:CONFIG_PROPERTY), $tmpl:CONFIG_EXTENDS), $tmpl:CONFIG_USE)
-            }
-        else
-            ()
-    ), map { "duplicates": "use-last" })
+    let $modContext := tmpl:child-context($context)
     let $ast := tmpl:tokenize($template) => tmpl:parse($config?resolver)
     let $ast := <ast>{ tmpl:normalize-cond-attrs($ast/node(), not($config?plainText)) }</ast>
     let $ast := tmpl:expand-blocks($ast, $incomingBlocks)
@@ -871,15 +913,97 @@ declare function tmpl:process($template as xs:string, $params as map(*), $config
     tmpl:process($template, $params, $config, ())
 };
 
+(:~
+ : Process a template. With $tmpl:CONFIG_CACHE set to a cache name, the
+ : compiled template is kept in that eXist cache: a later call with the same
+ : template, the same param names (values may differ) and the same config
+ : evaluates the stored code instead of parsing and generating it again, as
+ : long as none of the templates it extends or includes has changed.
+ :)
 declare function tmpl:process($template as xs:string, $params as map(*), $config as map(*), $blocks as element(template)*) {
-    let $ast := tmpl:to-ast($template, $params, $config, $blocks)
+    let $cacheName := if ($config?($tmpl:CONFIG_DEBUG)) then () else $config?($tmpl:CONFIG_CACHE)
+    let $key := if ($cacheName) then tmpl:cache-key($template, $params, $config, $blocks) else ()
+    let $compiled :=
+        if ($key) then
+            let $created := cache:create($cacheName, map { "maximumSize": $tmpl:CACHE_MAX_SIZE })
+            let $entry := cache:get($cacheName, $key)
+            return
+                if ($entry instance of map(*) and tmpl:dependencies-unchanged($entry?dependencies, $config?resolver)) then
+                    $entry
+                else
+                    ()
+        else
+            ()
+    return
+        if (exists($compiled)) then
+            tmpl:eval($compiled?code, $compiled?ast, tmpl:context($template, $params, $config), $config?resolver,
+                $compiled?modules, $compiled?namespaces)
+        else
+            tmpl:compile($template, $params, $config, $blocks, $cacheName, $key)
+};
+
+(:~
+ : What the generated code depends on, besides the templates it extends or
+ : includes: the template, the names (not the values) of the params, the
+ : params' templating section, the blocks, the config and this library's
+ : version. Empty if any of them can't be serialized; then nothing is cached.
+ :)
+declare %private function tmpl:cache-key($template as xs:string, $params as map(*), $config as map(*),
+        $blocks as element(template)*) as xs:string? {
+    try {
+        util:hash(string-join((
+            $tmpl:VERSION,
+            $template,
+            string-join(sort(map:keys($params)), ","),
+            serialize($params?($tmpl:CONFIG_PROPERTY), map { "method": "json" }),
+            serialize($blocks),
+            serialize(map:remove($config, ($tmpl:CONFIG_RESOLVER, $tmpl:CONFIG_DEBUG, $tmpl:CONFIG_CACHE)), map { "method": "json" })
+        ), "&#10;&#31;&#10;"), "sha-256")
+    } catch * {
+        ()
+    }
+};
+
+(:~
+ : True if each template a compiled template depends on still has the content
+ : it was compiled from. The map comes from the cache, so it is read with the
+ : lookup operator: calling a cached map as a function ($dependencies($path))
+ : fails in eXist when another request uses it at the same time.
+ :)
+declare %private function tmpl:dependencies-unchanged($dependencies as map(*)?, $resolver as function(*)?) as xs:boolean {
+    exists($dependencies) and
+        (every $path in map:keys($dependencies) satisfies $dependencies?($path) eq tmpl:content-hash($resolver($path)))
+};
+
+declare %private function tmpl:content-hash($resolved as map(*)?) as xs:string {
+    if (exists($resolved)) then util:hash(string($resolved?content), "sha-1") else ""
+};
+
+(:~
+ : Parse, generate and evaluate a template. With $key, the resolver records
+ : each template it resolves along the way, in a cache of its own, and the
+ : compiled template is stored under $key with the content hash of each of them.
+ :)
+declare %private function tmpl:compile($template as xs:string, $params as map(*), $config as map(*),
+        $blocks as element(template)*, $cacheName as xs:string?, $key as xs:string?) {
+    let $recorder := if ($key) then "tmpl-dependencies-" || util:uuid() else ()
+    let $compileConfig :=
+        if ($recorder) then
+            map:put($config, $tmpl:CONFIG_RESOLVER, function($path as xs:string) {
+                let $resolved := $config?resolver($path)
+                let $record := cache:put($recorder, $path, tmpl:content-hash($resolved))
+                return $resolved
+            })
+        else
+            $config
+    let $ast := tmpl:to-ast($template, $params, $compileConfig, $blocks)
     let $modules := map:merge((
         $config?modules,
         if (not($config?($tmpl:CONFIG_IMPORTS)) and exists($ast?context?($tmpl:CONFIG_PROPERTY))) then
             $ast?context?($tmpl:CONFIG_PROPERTY)?modules
         else
             (),
-        tmpl:imported-modules($ast?ast, $config?resolver)
+        tmpl:imported-modules($ast?ast, $compileConfig?resolver)
     ), map { "duplicates": "use-last" })
     let $namespaces := map:merge((
         $config?namespaces,
@@ -889,7 +1013,16 @@ declare function tmpl:process($template as xs:string, $params as map(*), $config
             ()
     ), map { "duplicates": "use-last" })
     let $mode := if ($config?plainText) then $tmpl:TEXT_MODE else $tmpl:XML_MODE
-    let $code := tmpl:generate($mode, $ast?ast, $ast?context, $modules, $namespaces, $config?resolver, $ast?blocks)
+    let $code := tmpl:generate($mode, $ast?ast, $ast?context, $modules, $namespaces, $compileConfig?resolver, $ast?blocks)
+    let $store :=
+        if ($key) then
+            let $dependencies := map:merge(cache:keys($recorder) ! map:entry(., cache:get($recorder, .)))
+            let $done := cache:destroy($recorder)
+            return cache:put($cacheName, $key, map {
+                "code": $code, "ast": $ast?ast, "modules": $modules, "namespaces": $namespaces, "dependencies": $dependencies
+            })
+        else
+            ()
     let $result := tmpl:eval($code, $ast?ast, $ast?context, $config?resolver, $modules, $namespaces)
     return
         if ($config?debug) then
