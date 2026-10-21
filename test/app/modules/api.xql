@@ -53,13 +53,24 @@ declare function api:resolver($relPath as xs:string) as map(*)? {
 declare function api:expand-template($request as map(*)) {
     let $template := $request?body?template
     let $params := head(($request?body?params, map {}))
+    let $cache := $request?body?cache
     return
         try {
-            tmpl:process($template, $params, map {
-                "plainText": not($request?body?mode = ('html', 'xml')), 
-                "resolver": api:resolver#1, 
-                "debug": true()
-            })
+            if ($cache) then
+                (: with a cache, as an app would call it: debug off, so the result alone :)
+                map {
+                    "result": tmpl:process($template, $params, map {
+                        "plainText": not($request?body?mode = ('html', 'xml')),
+                        "resolver": api:resolver#1,
+                        "cache": $cache
+                    })
+                }
+            else
+                tmpl:process($template, $params, map {
+                    "plainText": not($request?body?mode = ('html', 'xml')),
+                    "resolver": api:resolver#1,
+                    "debug": true()
+                })
         } catch * {
             if (exists($err:value)) then
                 roaster:response(500, "application/json", $err:value)
